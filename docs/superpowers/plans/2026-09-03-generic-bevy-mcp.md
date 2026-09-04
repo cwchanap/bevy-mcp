@@ -2,32 +2,30 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Build one generic local MCP/plugin package that launches and debugs Bevy 0.19 applications through official BRP plus `bevy_brp_extras`, with generic reflected ECS inspection/mutation, runtime control, input, validated screenshots, diagnostics, logs, and agent-plugin packaging.
+**Goal:** Build one generic local MCP/plugin package that launches and debugs Bevy 0.19 applications through official BRP plus `bevy_brp_extras`, with reflected ECS inspection/mutation, process/log control, input, validated screenshots, diagnostics, world statistics, virtual-time control, and agent-plugin packaging.
 
-**Architecture:** A Node/TypeScript stdio MCP server owns Cargo discovery, one managed child process, capability negotiation, stable MCP schemas, and localhost JSON-RPC translation. Full Bevy applications reuse official BRP and `bevy_brp_extras`; the small Rust `bevy-mcp-bridge` crate only composes `BrpExtrasPlugin` and registers repository-owned `bevy_mcp/world_stats` and `bevy_mcp/time_control` methods. Standalone `bevy_ecs::World` transport is deferred until a real consumer exists; when added, it must reuse `bevy_remote::builtin_methods` rather than implement a second BRP.
+**Architecture:** A Node/TypeScript stdio MCP server owns Cargo discovery, one managed child process, capability negotiation, stable MCP schemas, and localhost BRP translation. A small Rust `bevy-mcp-bridge` plugin composes `BrpExtrasPlugin` and registers only `bevy_mcp/world_stats` and `bevy_mcp/time_control`. Standalone `bevy_ecs::World` transport is deferred; a future slice must reuse public `bevy_remote::builtin_methods` instead of implementing a second BRP.
 
-**Tech Stack:** Node.js >=20, TypeScript 6, MCP TypeScript SDK v2 (`@modelcontextprotocol/server` + client dev dependency), Zod v4, Vitest, Rust >=1.95, Bevy 0.19.1, `bevy_brp_extras` 0.22.3, GitHub Actions, Agent Plugins 1.0.0.
+**Tech Stack:** Node.js >=20, TypeScript 6, MCP TypeScript SDK v2 (`@modelcontextprotocol/server`, `@modelcontextprotocol/client` for tests/smokes), Zod v4, Vitest, Rust >=1.95, Bevy 0.19.1, `bevy_brp_extras` 0.22.3, GitHub Actions, Agent Plugins 1.0.0.
 
 **Spec:** `docs/superpowers/specs/2026-09-03-generic-bevy-mcp-design.md`
 
 ## Global Constraints
 
-- Deliver all implementation tasks on existing draft PR #1 and branch `agent/generic-bevy-mcp-design`; do not open a second implementation PR.
-- V1 supports Bevy 0.19.x only; do not add version adapters or compatibility shims.
-- Use Rust edition 2024 and Rust >=1.95.0 for repository-owned Rust code.
-- Native runtime debugging only; no WASM/browser relay in v1.
-- No Scorpius-, Caelum-, or other game-specific tools or semantic operations.
+- Continue implementation on existing draft PR #1 and branch `agent/generic-bevy-mcp-design`; do not open a second PR.
+- V1 supports Bevy 0.19.x only.
+- Native runtime debugging only; no WASM/browser relay.
+- No game-specific tools or semantic operations.
 - No standalone `bevy_ecs` transport in v1.
-- Full Bevy apps must reuse official BRP and `bevy_brp_extras` 0.22.3 for world operations, screenshot, input, diagnostics, and shutdown.
-- Reflection is the only generic component/resource inspection boundary.
-- Runtime requests connect to `127.0.0.1` only, defaulting to port 15702.
-- Default runtime request timeout is 5 seconds; graceful shutdown grace is 2 seconds.
-- `query_entities` returns at most 200 rows by default and 2000 rows maximum; this is an MCP response cap, not a private BRP query parameter.
-- Debug output returns 200 lines by default and 5000 maximum.
-- Screenshot PNG payloads are capped at 16 MiB before base64 encoding.
-- The MCP server manages at most one child process at a time in v1.
-- Do not add a daemon, database, web UI, generic engine abstraction, retry framework, replay system, test DSL, or scheduler profiler.
-- Do not automatically edit `Cargo.toml` or Rust source; setup tools return status plus copyable Git-dependency/plugin snippets.
+- Reuse official BRP for ECS and `bevy_brp_extras` 0.22.3 for screenshot/input/diagnostics/shutdown.
+- Reflection is the only generic inspection/mutation boundary.
+- Connect only to `127.0.0.1`, default port 15702.
+- Runtime request timeout: 5 seconds. Graceful-stop window: 2 seconds.
+- `query_entities`: default 200 returned rows, maximum 2000; this is an MCP response cap only.
+- `get_debug_output`: default 200 lines, maximum 5000.
+- Screenshot PNG maximum: 16 MiB before base64 encoding.
+- Manage at most one child process per MCP server.
+- Do not add automatic Cargo/source rewriting, auth/TLS/retry framework, daemon, database, web UI, replay, test DSL, profiler, or cross-engine abstraction.
 
 ---
 
@@ -74,7 +72,7 @@ src/
     png.ts
     png.spec.ts
 
-Cargo.toml                         # created with Task 3, when all members exist
+Cargo.toml
 crates/bevy-mcp-bridge/
   Cargo.toml
   src/lib.rs
@@ -97,15 +95,15 @@ plugins/bevy-plugin/
 .github/workflows/ci.yml
 ```
 
-`src/index.ts` stays bootstrap-only. There is no `reflect.rs`, standalone HTTP server, ECS-only fixture, or second protocol implementation in v1.
+There is no `reflect.rs`, standalone HTTP server, ECS-only fixture, or second protocol implementation in v1.
 
 ---
 
-### Task 1: Bootstrap the npm MCP, Cargo discovery, and one managed process
+### Task 1: Bootstrap the npm MCP, Cargo discovery, build/run control, and logs
 
 **Files:**
 - Create: `package.json`
-- Create: `package-lock.json` through `npm install`
+- Create: `package-lock.json` via `npm install`
 - Create: `tsconfig.json`
 - Create: `vitest.config.ts`
 - Create: `LICENSE`
@@ -118,15 +116,15 @@ plugins/bevy-plugin/
 - Create: `src/tools/project.ts`
 
 **Interfaces:**
-- Produces `discoverBevyTargets(root: string): Promise<BevyTarget[]>`.
-- Produces `resolveTarget(targets: BevyTarget[], selection: TargetSelection): BevyTarget`.
-- Produces `buildTarget(spec: BuildSpec): Promise<BuildResult>`.
-- Produces one `ProcessManager` with `run`, `stop`, `restart`, `status`, and `getOutput`.
-- Produces `createServer(deps?: ServerDeps): McpServer`; later tasks add registrations to this factory.
+- `discoverBevyTargets(root: string): Promise<BevyTarget[]>`
+- `resolveTarget(targets: BevyTarget[], selection: TargetSelection): BevyTarget`
+- `buildTarget(spec: BuildSpec): Promise<BuildResult>`
+- `ProcessManager.run/stop/restart/status/getOutput`
+- `createServer(deps?: ServerDeps): McpServer`
 
-- [ ] **Step 1: Create the npm manifest and TypeScript config**
+- [ ] **Step 1: Create npm/TS manifests**
 
-Use this package shape:
+`package.json`:
 
 ```json
 {
@@ -135,16 +133,13 @@ Use this package shape:
   "description": "Generic MCP server for inspecting, controlling, and debugging Bevy applications.",
   "type": "module",
   "license": "MIT",
-  "bin": {
-    "bevy-plugin": "build/index.js"
-  },
+  "bin": { "bevy-plugin": "build/index.js" },
   "files": ["build", "plugin.json", "mcp.json"],
   "engines": { "node": ">=20" },
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "test:watch": "vitest",
     "test:integration": "node scripts/integration.mjs",
     "prepack": "npm run build",
     "smoke:packed": "node scripts/smoke-packed-cli.mjs"
@@ -162,23 +157,7 @@ Use this package shape:
 }
 ```
 
-`tsconfig.json` must include Node types explicitly:
-
-```json
-{
-  "compilerOptions": {
-    "target": "ES2022",
-    "module": "NodeNext",
-    "moduleResolution": "NodeNext",
-    "rootDir": ".",
-    "outDir": "build",
-    "strict": true,
-    "declaration": true,
-    "types": ["node"]
-  },
-  "include": ["src/**/*.ts"]
-}
-```
+`tsconfig.json` uses `NodeNext`, strict mode, ES2022, `build/`, declarations, and explicit `"types": ["node"]`.
 
 Run:
 
@@ -186,30 +165,20 @@ Run:
 npm install
 ```
 
-Expected: `package-lock.json` is generated and both MCP v2 packages resolve.
+Expected: lockfile generated; install succeeds.
 
 - [ ] **Step 2: Write failing Cargo discovery tests**
 
-`src/project/cargo.spec.ts` must lock executable-target discovery without parsing Rust source:
+Lock behavior from `cargo metadata --no-deps --format-version=1`:
 
 ```ts
-it('discovers Bevy bins and examples from cargo metadata', async () => {
-  const metadata = metadataFixture({
-    packages: [
-      pkg('game', { bevy: '0.19.1' }, [bin('game'), example('sandbox')]),
-      pkg('utility', {}, [bin('utility')])
-    ]
-  });
-
-  const targets = await discoverBevyTargets('/repo', fakeExec(metadata));
-
-  expect(targets).toEqual([
-    expect.objectContaining({ packageName: 'game', targetName: 'game', kind: 'bin', runtimeKind: 'full_bevy' }),
-    expect.objectContaining({ packageName: 'game', targetName: 'sandbox', kind: 'example', runtimeKind: 'full_bevy' }),
-    expect.objectContaining({ packageName: 'utility', targetName: 'utility', kind: 'bin', runtimeKind: 'unknown' })
-  ]);
-});
+expect(await discoverBevyTargets('/repo', fakeExec(metadata))).toEqual([
+  expect.objectContaining({ packageName: 'game', targetName: 'game', kind: 'bin', runtimeKind: 'full_bevy' }),
+  expect.objectContaining({ packageName: 'game', targetName: 'sandbox', kind: 'example', runtimeKind: 'full_bevy' })
+]);
 ```
+
+`runtimeKind` is `full_bevy` when the package directly depends on `bevy` or `bevy_brp_extras`; otherwise `unknown`.
 
 Run:
 
@@ -217,11 +186,9 @@ Run:
 npm test -- src/project/cargo.spec.ts
 ```
 
-Expected: FAIL because `discoverBevyTargets` does not exist.
+Expected: FAIL before implementation.
 
-- [ ] **Step 3: Implement Cargo metadata discovery and exact target resolution**
-
-Define:
+- [ ] **Step 3: Implement discovery and exact target resolution**
 
 ```ts
 export interface BevyTarget {
@@ -231,83 +198,44 @@ export interface BevyTarget {
   kind: 'bin' | 'example';
   runtimeKind: 'full_bevy' | 'unknown';
 }
-
-export interface TargetSelection {
-  packageName: string;
-  targetName: string;
-  kind: 'bin' | 'example';
-}
 ```
 
-Invoke Cargo as argv:
-
-```ts
-await execFileAsync('cargo', ['metadata', '--no-deps', '--format-version=1'], { cwd: root });
-```
-
-Infer `full_bevy` only when the package directly depends on `bevy` or `bevy_brp_extras`. Sort by package, kind, target.
-
-Run the focused test again; expected PASS.
+Invoke Cargo with `execFile`, never a shell string. Sort by package/kind/target.
 
 - [ ] **Step 4: Write failing build/process tests**
 
-Lock exact argv:
+Lock argv:
 
 ```text
-build bin     -> cargo build -p <package> --bin <target>
-build example -> cargo build -p <package> --example <target>
-run bin       -> cargo run -p <package> --bin <target> -- <app args...>
-run example   -> cargo run -p <package> --example <target> -- <app args...>
+cargo build -p <package> --bin <target>
+cargo build -p <package> --example <target>
+cargo run -p <package> --bin <target> -- <args...>
+cargo run -p <package> --example <target> -- <args...>
 ```
 
-Also prove one-process ownership and bounded output:
+Prove:
 
-```ts
-await manager.run(spec);
-await expect(manager.run(spec)).rejects.toMatchObject({ code: 'process_already_running' });
-expect(manager.getOutput({ lines: 2 }).lines).toEqual(['last-1', 'last']);
-```
+- second concurrent `run` -> `process_already_running`;
+- `BRP_EXTRAS_PORT` is set to selected port;
+- output ring retains last 5000 lines;
+- `getOutput({ lines: 2 })` returns the last two lines;
+- restart reuses the prior launch spec.
 
-Run:
+- [ ] **Step 5: Implement build/process manager**
 
-```bash
-npm test -- src/project/process-manager.spec.ts
-```
-
-Expected: FAIL before the implementation exists.
-
-- [ ] **Step 5: Implement build and process management**
-
-`buildTarget` uses `execFile('cargo', argv)` with no shell and returns:
-
-```ts
-export interface BuildResult {
-  success: boolean;
-  exitCode: number;
-  stdout: string;
-  stderr: string;
-}
-```
-
-`ProcessManager.run` uses:
+Use `execFile` for build and `spawn` for run:
 
 ```ts
 spawn('cargo', argv, {
   cwd: spec.root,
-  env: {
-    ...process.env,
-    BEVY_MCP_PORT: String(spec.port),
-    BRP_EXTRAS_PORT: String(spec.port)
-  },
+  env: { ...process.env, BRP_EXTRAS_PORT: String(spec.port) },
   stdio: ['ignore', 'pipe', 'pipe']
 });
 ```
 
-Maintain a 5000-line ring buffer and append raw stdout/stderr to one temp log file. `getOutput` clamps requested lines to 5000.
+Append stdout/stderr to a temp log file as well as the ring buffer.
 
-- [ ] **Step 6: Register project/process tools and stdio bootstrap**
-
-Register:
+- [ ] **Step 6: Register project/process MCP tools**
 
 ```text
 list_bevy_targets
@@ -318,7 +246,7 @@ restart_bevy
 get_debug_output
 ```
 
-`src/index.ts` stays:
+Bootstrap:
 
 ```ts
 #!/usr/bin/env node
@@ -328,19 +256,15 @@ import { createServer } from './server.js';
 void serveStdio(() => createServer());
 ```
 
-`stop_bevy` initially terminates the managed child; Task 4 upgrades it to try remote graceful shutdown first.
+Task 4 later upgrades `stop_bevy` to graceful BRP shutdown first.
 
-- [ ] **Step 7: Verify and commit Task 1**
-
-Run:
+- [ ] **Step 7: Verify and commit**
 
 ```bash
 npm run typecheck
 npm test
 npm run build
 ```
-
-Expected: PASS.
 
 Commit:
 
@@ -351,7 +275,7 @@ git add package.json package-lock.json tsconfig.json vitest.config.ts LICENSE sr
 
 ---
 
-### Task 2: Add BRP transport, capability discovery, and typed generic ECS tools
+### Task 2: Add BRP client, capabilities, typed ECS read/write tools, and raw method escape hatch
 
 **Files:**
 - Create: `src/runtime/client.ts`
@@ -367,107 +291,56 @@ git add package.json package-lock.json tsconfig.json vitest.config.ts LICENSE sr
 - Modify: `src/server.ts`
 
 **Interfaces:**
-- Produces `RuntimeClient.call<T>(method: string, params?: unknown): Promise<T>`.
-- Produces `probeRuntime(port: number, managed: boolean): Promise<RuntimeStatus>`.
-- Produces all normalized read contracts from the design spec.
-- Produces generic ECS read/write tools plus `list_remote_methods` and `call_remote_method`.
+- `RuntimeClient.call<T>(method: string, params?: unknown): Promise<T>`
+- `probeRuntime(port: number, managed: boolean): Promise<RuntimeStatus>`
+- stable read result types from the spec
+- ECS read/write tools plus `list_remote_methods`/`call_remote_method`
 
 - [ ] **Step 1: Write failing JSON-RPC client tests**
 
-Use a local fake HTTP server and lock the request:
+With a fake local HTTP server, prove exact request shape:
 
-```ts
-await client.call('world.list_components');
-expect(receivedBody).toEqual({
-  jsonrpc: '2.0',
-  id: 1,
-  method: 'world.list_components'
-});
+```json
+{ "jsonrpc": "2.0", "id": 1, "method": "world.list_components" }
 ```
 
-Cover:
-
-- successful `result`;
-- JSON-RPC `error` preservation;
-- non-2xx HTTP;
-- malformed JSON;
-- timeout -> `runtime_unreachable`.
-
-Run:
-
-```bash
-npm test -- src/runtime/client.spec.ts
-```
-
-Expected: FAIL.
+Cover success, BRP error, non-2xx, malformed JSON, and five-second timeout -> `runtime_unreachable`.
 
 - [ ] **Step 2: Implement `RuntimeClient`**
 
 Use built-in `fetch` only:
 
 ```ts
-export class RuntimeClient {
-  constructor(
-    private readonly port = 15702,
-    private readonly timeoutMs = 5000
-  ) {}
-
-  async call<T>(method: string, params?: unknown): Promise<T> {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), this.timeoutMs);
-    try {
-      const response = await fetch(`http://127.0.0.1:${this.port}/`, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({
-          jsonrpc: '2.0',
-          id: nextRequestId(),
-          method,
-          ...(params === undefined ? {} : { params })
-        }),
-        signal: controller.signal
-      });
-      return parseJsonRpcResponse<T>(response);
-    } finally {
-      clearTimeout(timer);
-    }
-  }
-}
+await fetch(`http://127.0.0.1:${port}/`, {
+  method: 'POST',
+  headers: { 'content-type': 'application/json' },
+  body: JSON.stringify(request),
+  signal: controller.signal
+});
 ```
 
-Normalize failures into the spec's small error set; keep BRP code/message in `remote_error.details`.
+Preserve BRP code/message in `remote_error.details`.
 
-- [ ] **Step 3: Pin the agent-facing read result types before tool implementation**
+- [ ] **Step 3: Pin read result types before handlers**
 
-`src/runtime/types.ts` must define exactly:
+`src/runtime/types.ts`:
 
 ```ts
 export interface ListComponentsResult { components: string[] }
 export interface ListResourcesResult { resources: string[] }
 export interface TypeSchemaResult { schema: Record<string, unknown> }
-
-export interface ComponentReadError {
-  message: string;
-  code?: number;
-}
-
+export interface ComponentReadError { message: string; code?: number }
 export interface EntitySnapshot {
   entity: number;
   components: Record<string, unknown>;
   errors: Record<string, ComponentReadError>;
 }
-
-export interface ResourceSnapshot {
-  resource: string;
-  value: unknown;
-}
-
+export interface ResourceSnapshot { resource: string; value: unknown }
 export interface QueryRow {
   entity: number;
   components: Record<string, unknown>;
   has?: Record<string, boolean>;
 }
-
 export interface QueryEntitiesResult {
   rows: QueryRow[];
   returned: number;
@@ -475,34 +348,13 @@ export interface QueryEntitiesResult {
 }
 ```
 
-Do not add a second schema model for `registry.schema`; wrap the returned BRP object under `schema`.
+- [ ] **Step 4: Write failing capability tests using only `rpc.discover`**
 
-- [ ] **Step 4: Write failing capability tests derived only from `rpc.discover`**
+Derive flags from exact methods. Removing `brp_extras/screenshot`, `brp_extras/get_diagnostics`, or `bevy_mcp/time_control` must only disable their matching capability.
 
-Given discovered methods, prove:
+No bridge method returns hardcoded render/input/diagnostics flags.
 
-```ts
-expect(deriveCapabilities(methods, true)).toEqual({
-  process: true,
-  ecsRead: true,
-  ecsWrite: true,
-  registrySchema: true,
-  app: true,
-  render: true,
-  input: true,
-  virtualTime: true,
-  diagnostics: true,
-  gracefulShutdown: true
-});
-```
-
-Then remove `brp_extras/screenshot`, `brp_extras/get_diagnostics`, and `bevy_mcp/time_control` and prove only their matching flags turn false.
-
-No bridge-owned method may hardcode render/input/diagnostics flags.
-
-- [ ] **Step 5: Implement `rpc.discover` parsing and `get_runtime_status`**
-
-Define:
+- [ ] **Step 5: Implement discovery/capability probing**
 
 ```ts
 export interface RuntimeStatus {
@@ -513,13 +365,11 @@ export interface RuntimeStatus {
 }
 ```
 
-Collect method names from the OpenRPC document, sort them, and derive capabilities by exact name.
-
-`app` is true for a reachable BRP endpoint. `process` comes from `ProcessManager`, not the endpoint.
+Sort discovered methods. `process` comes from `ProcessManager`; a reachable BRP endpoint implies `app: true`.
 
 - [ ] **Step 6: Write failing read-tool mapping tests**
 
-Tests must lock these normalized mappings:
+Lock mappings:
 
 ```text
 list_components -> world.list_components -> { components }
@@ -528,37 +378,21 @@ get_type_schema -> registry.schema       -> { schema }
 get_resource    -> world.get_resources   -> { resource, value }
 ```
 
-`get_entity` without an explicit component list must:
+`get_entity` without component names performs `world.list_components({ entity })`, then non-strict `world.get_components`, preserving both `components` and `errors`.
 
-1. call `world.list_components` with `{ entity }`;
-2. call `world.get_components` with those component names and `strict: false`;
-3. preserve both the BRP `components` and `errors` maps in `EntitySnapshot`.
-
-For `query_entities`, lock standard Bevy request shape:
+`query_entities` forwards only standard BRP fields:
 
 ```ts
-expect(call).toEqual({
-  method: 'world.query',
-  params: {
-    data: {
-      components: ['fixture::Position'],
-      option: [],
-      has: ['fixture::Selected']
-    },
-    filter: {
-      with: ['fixture::Position'],
-      without: []
-    },
-    strict: false
-  }
-});
+{
+  data: { components, option: optional, has },
+  filter: { with, without },
+  strict
+}
 ```
 
-If BRP returns 250 rows and `limit=200`, return 200 rows with `returned: 200, truncated: true`. Never send `limit` or `bevy_mcp_limit` to BRP.
+If BRP returns 250 rows and `limit=200`, MCP returns 200 with `truncated: true`. Never send `limit`/`bevy_mcp_limit` to BRP.
 
 - [ ] **Step 7: Implement read tools**
-
-Register:
 
 ```text
 get_runtime_status
@@ -571,11 +405,11 @@ get_resource
 get_world_stats
 ```
 
-`get_world_stats` initially checks for `bevy_mcp/world_stats` and returns `unsupported_capability` when absent; Task 3 adds the method.
+Before Task 3, `get_world_stats` returns `unsupported_capability` if the custom method is absent.
 
-- [ ] **Step 8: Write failing mutation/raw-method tests**
+- [ ] **Step 8: Write failing mutation/raw-call tests**
 
-Lock exact mappings:
+Mappings:
 
 ```text
 spawn_entity      -> world.spawn_entity
@@ -588,13 +422,11 @@ mutate_resource   -> world.mutate_resources
 remove_resource   -> world.remove_resources
 ```
 
-Void BRP success normalizes to `{ ok: true }`. Spawn normalizes to `{ entity }`.
+Void success -> `{ ok: true }`; spawn -> `{ entity }`.
 
-`call_remote_method` must reject a method name not present in the latest `rpc.discover` result before sending a request.
+`call_remote_method` must reject a method absent from the latest discovery result before transport.
 
-- [ ] **Step 9: Implement mutation and protocol escape-hatch tools**
-
-Register:
+- [ ] **Step 9: Implement mutation and protocol tools**
 
 ```text
 spawn_entity
@@ -609,19 +441,15 @@ list_remote_methods
 call_remote_method
 ```
 
-Keep mutation schemas generic JSON/reflection inputs; do not add semantic validation.
+No game-aware validation.
 
-- [ ] **Step 10: Verify and commit Task 2**
-
-Run:
+- [ ] **Step 10: Verify and commit**
 
 ```bash
 npm run typecheck
 npm test
 npm run build
 ```
-
-Expected: PASS.
 
 Commit:
 
@@ -632,7 +460,7 @@ git add src/runtime src/tools src/server.ts
 
 ---
 
-### Task 3: Add the full-Bevy bridge plugin and runtime fixture
+### Task 3: Add the full-Bevy bridge plugin and one real runtime fixture
 
 **Files:**
 - Create: `Cargo.toml`
@@ -644,14 +472,14 @@ git add src/runtime src/tools src/server.ts
 - Create: `fixtures/full-app/src/main.rs`
 
 **Interfaces:**
-- Produces `bevy_mcp_bridge::BevyMcpPlugin`.
-- Produces remote method `bevy_mcp/world_stats`.
-- Produces remote method `bevy_mcp/time_control`.
-- Produces one actual full Bevy runtime fixture used by later integration tests.
+- `bevy_mcp_bridge::BevyMcpPlugin`
+- remote `bevy_mcp/world_stats`
+- remote `bevy_mcp/time_control`
+- one full-app fixture for later E2E
 
-- [ ] **Step 1: Create the Cargo workspace only now that every member exists**
+- [ ] **Step 1: Create Cargo workspace only when members exist**
 
-Root `Cargo.toml`:
+Root:
 
 ```toml
 [workspace]
@@ -663,7 +491,7 @@ default-members = ["crates/bevy-mcp-bridge"]
 resolver = "3"
 ```
 
-Bridge manifest:
+Bridge:
 
 ```toml
 [package]
@@ -680,19 +508,7 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 ```
 
-Fixture manifest:
-
-```toml
-[package]
-name = "bevy-mcp-full-fixture"
-version = "0.1.0"
-edition = "2024"
-publish = false
-
-[dependencies]
-bevy = "0.19.1"
-bevy-mcp-bridge = { path = "../../crates/bevy-mcp-bridge" }
-```
+Fixture depends on `bevy = "0.19.1"` and path `bevy-mcp-bridge`.
 
 Run:
 
@@ -700,18 +516,16 @@ Run:
 cargo metadata --no-deps --format-version=1 > /dev/null
 ```
 
-Expected: PASS; no nonexistent workspace member exists.
+Expected: PASS.
 
-- [ ] **Step 2: Write failing Rust tests for custom remote methods**
+- [ ] **Step 2: Write failing Rust tests**
 
-Tests in `crates/bevy-mcp-bridge/tests/plugin.rs` must prove:
+Prove:
 
-- adding `BevyMcpPlugin` makes `rpc.discover` include `bevy_mcp/world_stats` and `bevy_mcp/time_control`;
-- `world_stats` reports entity/archetype/component counts for a tiny test world;
-- `time_control` pauses, resumes, and sets relative speed;
-- no test asserts screenshot/input/diagnostics booleans from hardcoded bridge state.
-
-Use normal Bevy app updates rather than launching HTTP in unit tests.
+- `rpc.discover` contains `bevy_mcp/world_stats` and `bevy_mcp/time_control` after plugin registration;
+- world stats report entity/archetype/component counts;
+- time control pauses/resumes/changes relative speed;
+- tests do not assert hardcoded render/input/diagnostics capability flags.
 
 Run:
 
@@ -719,48 +533,28 @@ Run:
 cargo test -p bevy-mcp-bridge
 ```
 
-Expected: FAIL before implementation.
+Expected: FAIL.
 
 - [ ] **Step 3: Implement `BevyMcpPlugin` by composing `BrpExtrasPlugin`**
 
-`src/lib.rs`:
+Add `BrpExtrasPlugin`, register the two method systems with the app world, and insert them into `RemoteMethods` as instant methods.
+
+Representative shape:
 
 ```rust
-use bevy::prelude::*;
-use bevy::remote::{RemoteMethodSystemId, RemoteMethods};
-use bevy_brp_extras::BrpExtrasPlugin;
-
-mod methods;
-
-pub struct BevyMcpPlugin;
-
-impl Plugin for BevyMcpPlugin {
-    fn build(&self, app: &mut App) {
-        app.add_plugins(BrpExtrasPlugin);
-
-        let world_stats = app.world_mut().register_system(methods::world_stats);
-        let time_control = app.world_mut().register_system(methods::time_control);
-
-        let mut remote = app.world_mut().resource_mut::<RemoteMethods>();
-        remote.insert(
-            "bevy_mcp/world_stats",
-            RemoteMethodSystemId::Instant(world_stats),
-        );
-        remote.insert(
-            "bevy_mcp/time_control",
-            RemoteMethodSystemId::Instant(time_control),
-        );
-    }
-}
+app.add_plugins(BrpExtrasPlugin);
+let stats = app.world_mut().register_system(methods::world_stats);
+let time = app.world_mut().register_system(methods::time_control);
+let mut remote = app.world_mut().resource_mut::<RemoteMethods>();
+remote.insert("bevy_mcp/world_stats", RemoteMethodSystemId::Instant(stats));
+remote.insert("bevy_mcp/time_control", RemoteMethodSystemId::Instant(time));
 ```
 
-If the exact 0.19.1 `RemoteMethods::insert` signature requires the method name as `String`, adapt the call mechanically; do not introduce another registration abstraction.
+Adapt only the exact string ownership/signature required by Bevy 0.19.1; do not create a registration framework.
 
-`BrpExtrasPlugin` remains the sole HTTP/extras composition layer and honors `BRP_EXTRAS_PORT`.
+- [ ] **Step 4: Implement world stats**
 
-- [ ] **Step 4: Implement `world_stats`**
-
-Return JSON equivalent to:
+Return:
 
 ```rust
 #[derive(Serialize)]
@@ -772,11 +566,11 @@ struct WorldStats {
 }
 ```
 
-Count component instances by adding each archetype's entity count to every component type present in that archetype. Use Bevy component metadata for names. Do not record history/timing.
+Use current archetypes: each archetype's entity count contributes to each component type in that archetype. No history/profiling.
 
-- [ ] **Step 5: Implement `time_control` against `Time<Virtual>`**
+- [ ] **Step 5: Implement virtual-time control**
 
-Accepted JSON:
+Accepted params:
 
 ```json
 { "action": "pause" }
@@ -784,19 +578,11 @@ Accepted JSON:
 { "action": "set_scale", "scale": 2.0 }
 ```
 
-Reject non-finite/non-positive scales with a BRP invalid-params error. Use only:
+Use `Time<Virtual>::pause`, `unpause`, `set_relative_speed`. Reject non-finite/non-positive scale as invalid params. Return current paused/relative-speed state.
 
-```rust
-time.pause();
-time.unpause();
-time.set_relative_speed(scale);
-```
+- [ ] **Step 6: Create the full-app fixture**
 
-Return the current paused state and relative speed after the action.
-
-- [ ] **Step 6: Build the full-app fixture**
-
-`fixtures/full-app/src/main.rs` must contain:
+Include:
 
 ```rust
 #[derive(Component, Reflect)]
@@ -805,32 +591,18 @@ struct DebugCounter(u32);
 
 #[derive(Resource, Reflect, Default)]
 #[reflect(Resource)]
-struct InputState {
-    key_a_presses: u32,
-}
+struct InputState { key_a_presses: u32 }
 ```
 
-Register both types, insert `InputState`, spawn one `DebugCounter`, a `Camera2d`, and a visible colored sprite/UI primitive. Add a system that increments `InputState.key_a_presses` when `KeyCode::KeyA` is just pressed.
+Register both types. Spawn `DebugCounter`, a `Camera2d`, and a visible primitive. Add a system that increments `InputState.key_a_presses` on `KeyCode::KeyA` just-pressed. Add `BevyMcpPlugin`.
 
-Add:
-
-```rust
-.add_plugins(bevy_mcp_bridge::BevyMcpPlugin)
-```
-
-This fixture is the only runtime fixture in v1.
-
-- [ ] **Step 7: Verify and commit Task 3**
-
-Run:
+- [ ] **Step 7: Verify and commit**
 
 ```bash
 cargo fmt --all -- --check
 cargo test --workspace
 cargo clippy --workspace --all-targets -- -D warnings
 ```
-
-Expected: PASS.
 
 Commit:
 
@@ -841,7 +613,7 @@ git add Cargo.toml crates fixtures/full-app
 
 ---
 
-### Task 4: Add generic time/input/screenshot/diagnostics control with PNG bounds
+### Task 4: Add time/input/screenshot/diagnostics/shutdown tools with PNG validation
 
 **Files:**
 - Create: `src/tools/control.ts`
@@ -857,13 +629,13 @@ git add Cargo.toml crates fixtures/full-app
 - Modify: `src/server.ts`
 
 **Interfaces:**
-- Produces `control_time`, `send_keys`, `type_text`, `mouse_input`, `capture_screenshot`, `get_diagnostics`, `shutdown_runtime`.
-- Produces `validatePngFile(path: string): Promise<ValidatedPng>` with a hard 16 MiB cap.
-- Upgrades managed stop to remote graceful shutdown first.
+- `control_time`, `send_keys`, `type_text`, `mouse_input`, `capture_screenshot`, `get_diagnostics`, `shutdown_runtime`
+- `validatePngFile(path: string): Promise<ValidatedPng>`
+- managed stop tries graceful BRP shutdown first
 
-- [ ] **Step 1: Write failing time/input mapping tests**
+- [ ] **Step 1: Write failing control/input mapping tests**
 
-Lock:
+Mappings:
 
 ```text
 control_time -> bevy_mcp/time_control
@@ -871,75 +643,66 @@ send_keys    -> brp_extras/send_keys
 type_text    -> brp_extras/type_text
 ```
 
-`mouse_input` maps action enum exactly:
+`mouse_input` actions are exactly:
 
 ```text
-move          -> brp_extras/move_mouse
-click         -> brp_extras/click_mouse
-double_click  -> brp_extras/double_click_mouse
-button_down   -> brp_extras/send_mouse_button
-drag          -> brp_extras/drag_mouse
-scroll        -> brp_extras/scroll_mouse
+move         -> brp_extras/move_mouse
+click        -> brp_extras/click_mouse
+double_click -> brp_extras/double_click_mouse
+press        -> brp_extras/send_mouse_button
+drag         -> brp_extras/drag_mouse
+scroll       -> brp_extras/scroll_mouse
 ```
 
-For `button_up`, use the `send_mouse_button` parameter form documented by `bevy_brp_extras` for release; do not synthesize an OS event.
+`press` carries `button`, optional `duration_ms`, optional window ID and represents timed press-hold-release. There are no `button_down`/`button_up` actions.
 
-Every handler checks the matching discovered capability/method before calling the runtime.
+Each handler checks discovery before calling the method.
 
 - [ ] **Step 2: Implement control/input tools**
 
-`control_time` schema:
+`control_time` validates:
 
 ```ts
-const timeControl = z.discriminatedUnion('action', [
+z.discriminatedUnion('action', [
   z.object({ action: z.literal('pause') }),
   z.object({ action: z.literal('resume') }),
   z.object({ action: z.literal('set_scale'), scale: z.number().finite().positive() })
 ]);
 ```
 
-Keep mouse payload schemas close to the underlying extras method parameters; do not create a generic event language.
+Keep extras payload field names (`duration_ms`, etc.) at the runtime boundary; MCP schemas may expose camelCase but must map explicitly.
 
 - [ ] **Step 3: Write failing PNG validation tests**
 
-`src/screenshot/png.spec.ts` must prove rejection of:
+Reject:
 
-- nonexistent file;
-- file > 16 MiB, rejected from `stat` before full read;
-- wrong PNG signature;
+- missing file;
+- file >16 MiB from `stat` before full read;
+- invalid signature;
 - truncated header;
-- zero width;
-- zero height.
+- missing `IHDR`;
+- width 0;
+- height 0.
 
-A valid fixture proves width/height and byte length.
+Valid PNG returns width/height/byteLength.
 
-Use constants:
+- [ ] **Step 4: Implement PNG guard**
 
 ```ts
 export const MAX_SCREENSHOT_PNG_BYTES = 16 * 1024 * 1024;
 const PNG_SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 ```
 
-- [ ] **Step 4: Implement bounded PNG validation**
-
 Algorithm:
 
-```ts
-const stat = await fs.stat(path);
-if (stat.size <= 0 || stat.size > MAX_SCREENSHOT_PNG_BYTES) throw screenshotError(...);
+1. `fs.stat` and size check;
+2. read first 24 bytes;
+3. validate signature;
+4. require bytes 12..15 = `IHDR`;
+5. read big-endian width/height from bytes 16..23 and require >0;
+6. only then `fs.readFile`.
 
-const handle = await fs.open(path, 'r');
-const header = Buffer.alloc(24);
-await handle.read(header, 0, header.length, 0);
-await handle.close();
-
-// bytes 0..7 signature
-// bytes 12..15 must be ASCII "IHDR"
-// bytes 16..19 width big-endian
-// bytes 20..23 height big-endian
-```
-
-Only after those checks call `fs.readFile(path)`. Return:
+Return:
 
 ```ts
 export interface ValidatedPng {
@@ -955,24 +718,14 @@ export interface ValidatedPng {
 `capture_screenshot` must:
 
 1. create a temp `.png` path;
-2. call `brp_extras/screenshot` with `{ path, camera?, entity?, padding? }` using the exact extras field names;
-3. call `validatePngFile`;
-4. return MCP image content `mimeType: 'image/png'` with base64 data;
-5. delete the temp file in `finally` on success and failure.
+2. call `brp_extras/screenshot` with `{ path, camera?, entity?, padding? }`;
+3. validate file;
+4. return MCP image content as `image/png`;
+5. remove temp file in `finally` on success/failure.
 
-Test an oversized file path and prove no image content is returned.
+Oversized PNG must return no image content.
 
 - [ ] **Step 6: Implement screenshot/diagnostics/shutdown tools**
-
-Register:
-
-```text
-capture_screenshot
-get_diagnostics
-shutdown_runtime
-```
-
-Mappings:
 
 ```text
 capture_screenshot -> brp_extras/screenshot
@@ -980,21 +733,19 @@ get_diagnostics    -> brp_extras/get_diagnostics
 shutdown_runtime   -> brp_extras/shutdown
 ```
 
-`shutdown_runtime` returns `{ ok: true }` after remote success.
+Register all tool handlers in `server.ts`.
 
-- [ ] **Step 7: Upgrade `stop_bevy` to graceful shutdown first**
+- [ ] **Step 7: Upgrade managed stop to graceful shutdown first**
 
-When the managed runtime is reachable and advertises `brp_extras/shutdown`:
+If runtime is reachable and advertises `brp_extras/shutdown`:
 
-1. invoke it;
+1. call it;
 2. wait up to 2 seconds for child exit;
-3. if still alive, use the existing child termination path.
+3. terminate only if still alive.
 
-Tests use fake timers/process handles and prove fallback occurs exactly once.
+Unit test fallback with fake timers/child handle.
 
-- [ ] **Step 8: Verify and commit Task 4**
-
-Run:
+- [ ] **Step 8: Verify and commit**
 
 ```bash
 npm run typecheck
@@ -1002,8 +753,6 @@ npm test
 npm run build
 cargo test --workspace
 ```
-
-Expected: PASS.
 
 Commit:
 
@@ -1014,22 +763,23 @@ git add src
 
 ---
 
-### Task 5: Add bridge setup/status and one real full-app MCP integration journey
+### Task 5: Add bridge setup/status and one real MCP-client full-app journey
 
 **Files:**
 - Create: `src/tools/bridge.ts`
 - Create: `src/tools/bridge.spec.ts`
 - Create: `scripts/integration.mjs`
 - Modify: `src/server.ts`
-- Modify: `fixtures/full-app/src/main.rs` only if the integration test exposes a fixture-observability gap
+- Modify: `fixtures/full-app/src/main.rs` only if integration reveals a fixture-observability gap
 
 **Interfaces:**
-- Produces `get_bridge_status` and `get_bridge_setup`.
-- Produces one MCP-client-driven native integration journey using `@modelcontextprotocol/client`.
+- `get_bridge_status`
+- `get_bridge_setup`
+- one real MCP v2 client integration journey
 
-- [ ] **Step 1: Write failing bridge status/setup tests**
+- [ ] **Step 1: Write failing bridge tests**
 
-`get_bridge_status` must combine Cargo metadata plus live method discovery and return:
+Result:
 
 ```ts
 export interface BridgeStatus {
@@ -1040,9 +790,9 @@ export interface BridgeStatus {
 }
 ```
 
-`get_bridge_setup` must return exactly the Git-based v1 setup:
+Setup output must include exactly:
 
-```text
+```bash
 cargo add bevy-mcp-bridge --git https://github.com/cwchanap/bevy-mcp
 ```
 
@@ -1052,77 +802,55 @@ and:
 .add_plugins(bevy_mcp_bridge::BevyMcpPlugin)
 ```
 
-There is no mutation/install action.
+No mutation tool.
 
-- [ ] **Step 2: Implement bridge tools**
+- [ ] **Step 2: Implement bridge status/setup**
 
-Register:
+Static dependency presence from Cargo metadata; runtime methods from `rpc.discover`. Register both tools.
 
-```text
-get_bridge_status
-get_bridge_setup
-```
+- [ ] **Step 3: Build integration script with real MCP client**
 
-Static dependency detection uses `cargo metadata`; runtime detection uses `rpc.discover`. Do not inspect Rust source.
-
-- [ ] **Step 3: Write the integration script using the real MCP v2 client**
-
-`scripts/integration.mjs` imports:
+Imports:
 
 ```js
 import { Client } from '@modelcontextprotocol/client';
 import { StdioClientTransport } from '@modelcontextprotocol/client/stdio';
 ```
 
-Connect to:
+Start `node build/index.js`, connect with `Client.connect()`, and choose a free BRP port.
 
-```js
-new StdioClientTransport({
-  command: 'node',
-  args: ['build/index.js']
-});
-```
+- [ ] **Step 4: Execute the full journey only through MCP tools**
 
-The script resolves the repository root and chooses a free port before calling MCP tools.
+Sequence:
 
-- [ ] **Step 4: Implement the end-to-end journey**
-
-Through `client.callTool`, execute in this order:
-
-1. `list_bevy_targets` and find `bevy-mcp-full-fixture`;
-2. `run_bevy` with the free port;
-3. poll `get_runtime_status` until `rpc.discover` is reachable or 20 seconds elapse;
-4. `list_components` and assert the reflected `DebugCounter` type is present;
-5. `query_entities` for `DebugCounter` and capture its entity ID;
-6. `mutate_component` to change the counter;
-7. `get_entity` and assert the changed reflected value;
-8. `control_time` pause, set scale, resume;
+1. `list_bevy_targets` -> find `bevy-mcp-full-fixture`;
+2. `run_bevy` with free port;
+3. poll `get_runtime_status` until reachable or 20s timeout;
+4. `list_components` -> reflected `DebugCounter` exists;
+5. `query_entities` -> get its entity ID;
+6. `mutate_component` -> change value;
+7. `get_entity` -> verify new value;
+8. `control_time` pause/set scale/resume;
 9. `send_keys` with `KeyA`;
 10. poll `get_resource` until `InputState.key_a_presses >= 1`;
-11. `capture_screenshot` and assert returned image content is PNG and non-empty;
+11. `capture_screenshot` -> non-empty PNG image content;
 12. `get_diagnostics`;
 13. `get_world_stats`;
 14. `stop_bevy`;
-15. `get_debug_output` and assert fixture startup output is present.
+15. `get_debug_output` -> fixture startup line present.
 
-Use bounded polling helpers; no arbitrary sleeps longer than 100 ms between polls.
+Polling delay <=100ms; no long arbitrary sleeps.
 
-- [ ] **Step 5: Run the real integration test under Xvfb**
-
-Linux command:
+- [ ] **Step 5: Run integration under Xvfb**
 
 ```bash
 npm run build
 xvfb-run -a npm run test:integration
 ```
 
-Expected: PASS.
+Expected: PASS. Keep real renderer/screenshot path; do not replace it with a fake if CI needs Linux packages.
 
-If the fixture cannot initialize graphics in the default GitHub runner, install the minimal Linux packages required by Bevy in Task 6 CI; do not replace the real screenshot path with a fake renderer.
-
-- [ ] **Step 6: Verify and commit Task 5**
-
-Run:
+- [ ] **Step 6: Verify and commit**
 
 ```bash
 npm run typecheck
@@ -1134,8 +862,6 @@ cargo clippy --workspace --all-targets -- -D warnings
 xvfb-run -a npm run test:integration
 ```
 
-Expected: PASS.
-
 Commit:
 
 ```bash
@@ -1145,7 +871,7 @@ git add src/tools/bridge.ts src/tools/bridge.spec.ts src/server.ts scripts/integ
 
 ---
 
-### Task 6: Package the agent plugin, add npm release automation, docs, and final verification
+### Task 6: Package agent plugins, packed smoke, README, CI, and npm publication
 
 **Files:**
 - Create: `plugin.json`
@@ -1158,14 +884,14 @@ git add src/tools/bridge.ts src/tools/bridge.spec.ts src/server.ts scripts/integ
 - Create: `scripts/smoke-packed-cli.mjs`
 - Create: `.github/workflows/ci.yml`
 - Modify: `README.md`
-- Modify: `package.json` only if packed-file coverage requires an explicit file entry
+- Create if useful: `src/packaging/metadata.spec.ts`
 
 **Interfaces:**
-- Publishes one npm binary: `@cwchanap/bevy-plugin`.
-- All Agent Plugins/Codex/Claude metadata invokes that same stdio binary.
-- CI validates every gate and publishes npm only on release/manual publish trigger.
+- one npm binary `@cwchanap/bevy-plugin`
+- every agent wrapper invokes that same binary
+- release/manual publish job publishes npm
 
-- [ ] **Step 1: Write plugin metadata matching the existing Godot distribution shape**
+- [ ] **Step 1: Write plugin metadata**
 
 Root `mcp.json`:
 
@@ -1182,45 +908,32 @@ Root `mcp.json`:
 }
 ```
 
-Root `plugin.json` uses Agent Plugins 1.0.0 schema, name `bevy-plugin`, version `0.1.0`, repository `https://github.com/cwchanap/bevy-mcp`, and MIT license.
+Root `plugin.json`: Agent Plugins 1.0.0, name `bevy-plugin`, version `0.1.0`, repo `https://github.com/cwchanap/bevy-mcp`, MIT.
 
-`plugins/bevy-plugin/.mcp.json` repeats the same single-server configuration for native marketplace wrappers. Codex/Claude plugin metadata contains no second MCP implementation.
+Codex/Claude/marketplace wrappers reuse the same MCP command; no client-specific server.
 
-- [ ] **Step 2: Add metadata unit coverage**
+- [ ] **Step 2: Add metadata unit test**
 
-Add a small metadata test under the existing test runner (for example `src/tools/bridge.spec.ts` or a focused `src/packaging/metadata.spec.ts`) that reads all metadata JSON and asserts:
+Read every metadata JSON and assert:
 
-- every MCP entry names `bevy`;
-- every command is `npx`;
-- every args list pins exactly `-y @cwchanap/bevy-plugin@0.1.0`;
-- plugin versions are `0.1.0`.
+- MCP server name `bevy`;
+- command `npx`;
+- args exactly `-y @cwchanap/bevy-plugin@0.1.0`;
+- plugin version `0.1.0`.
 
-Do not test JSON formatting or key order.
+- [ ] **Step 3: Implement packed MCP smoke using `@modelcontextprotocol/client`**
 
-- [ ] **Step 3: Implement a real packed MCP smoke with the v2 client package**
+`scripts/smoke-packed-cli.mjs`:
 
-`scripts/smoke-packed-cli.mjs` must:
+1. `npm pack --json`;
+2. install tarball into temp directory;
+3. start installed `bevy-plugin` with `StdioClientTransport`;
+4. `await client.connect(transport)`;
+5. `client.listTools()`;
+6. assert at least `list_bevy_targets`, `run_bevy`, `query_entities`, `capture_screenshot`, `get_runtime_status`;
+7. close/delete temp artifacts in `finally`.
 
-1. run `npm pack --json`;
-2. resolve the produced tarball;
-3. install the tarball into a temp directory with npm;
-4. start its `bevy-plugin` executable through `StdioClientTransport`;
-5. `await client.connect(transport)` to perform initialize;
-6. call `client.listTools()`;
-7. assert at least:
-
-```text
-list_bevy_targets
-run_bevy
-query_entities
-capture_screenshot
-get_runtime_status
-```
-
-8. close the client;
-9. delete the temp directory and packed tarball in `finally`.
-
-Do not hand-write MCP initialize JSON.
+No handwritten MCP initialize packet.
 
 Run:
 
@@ -1231,39 +944,29 @@ npm run smoke:packed
 
 Expected: PASS.
 
-- [ ] **Step 4: Write the README around the actual v1 boundary**
+- [ ] **Step 4: Rewrite README for actual v1**
 
-README sections must include:
+Must cover:
 
-- what the generic MCP does;
+- purpose/tool categories;
 - Node/Rust/Bevy 0.19 requirements;
-- npm/MCP usage;
-- Codex/Claude/Agent Plugins install examples;
-- Bevy app setup via Git dependency:
+- npm/MCP/Codex/Claude/Agent Plugins setup;
+- bridge Git install + one-line plugin snippet;
+- reflection + `register_type` requirement for game-owned types;
+- BRP/`bevy_brp_extras` apps already support standard subset;
+- no `step_frame`;
+- supported mouse actions (`move`, `click`, `double_click`, timed `press`, `drag`, `scroll`);
+- localhost/native-only behavior;
+- query response cap and 16 MiB screenshot cap;
+- standalone ECS deferred; future bridge must reuse `bevy_remote::builtin_methods`.
 
-```bash
-cargo add bevy-mcp-bridge --git https://github.com/cwchanap/bevy-mcp
-```
+No game-specific instructions.
 
-```rust
-.add_plugins(bevy_mcp_bridge::BevyMcpPlugin)
-```
+- [ ] **Step 5: Add CI and npm publish job**
 
-- how to expose game-owned types with `Reflect` + `register_type`;
-- that BRP-only/`bevy_brp_extras` apps already get the standard subset without the companion bridge;
-- why `step_frame` is absent;
-- localhost/native-only limitations;
-- query response caps;
-- 16 MiB screenshot cap;
-- standalone ECS explicitly deferred, with the future direction: caller-polled bridge dispatching to `bevy_remote::builtin_methods`, not a second protocol.
+Triggers: push/PR to `main`, release published, workflow dispatch with `trigger_publish`.
 
-Do not add Scorpius/Caelum-specific instructions.
-
-- [ ] **Step 5: Add CI plus npm publish behavior**
-
-`.github/workflows/ci.yml` triggers on pushes/PRs to `main`, release publication, and manual workflow dispatch with `trigger_publish`.
-
-Install Linux runtime dependencies before Rust/integration gates:
+Linux setup:
 
 ```bash
 sudo apt-get update
@@ -1284,13 +987,13 @@ cargo clippy --workspace --all-targets -- -D warnings
 xvfb-run -a npm run test:integration
 ```
 
-Publish job mirrors `godot-mcp`:
+Publish condition:
 
 ```yaml
 if: ${{ github.event_name == 'release' || (github.event_name == 'workflow_dispatch' && github.event.inputs.trigger_publish == 'true') }}
 ```
 
-Then:
+Publish:
 
 ```bash
 npm ci
@@ -1298,13 +1001,11 @@ npm run build
 npm publish
 ```
 
-with `NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}` and npm registry configured by `actions/setup-node`.
+with npm registry configured in `actions/setup-node` and `NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}`.
 
-There is no crates.io publish job in v1; README/setup uses the Git dependency.
+No crates.io publish in v1; Rust setup uses Git.
 
-- [ ] **Step 6: Run the complete verification gate locally**
-
-Run:
+- [ ] **Step 6: Run final gate**
 
 ```bash
 npm ci
@@ -1318,20 +1019,19 @@ cargo clippy --workspace --all-targets -- -D warnings
 xvfb-run -a npm run test:integration
 ```
 
-Expected: every command PASS.
+Expected: all PASS.
 
-- [ ] **Step 7: Self-review the final implementation against the spec**
+- [ ] **Step 7: Scope/self-review**
 
-Verify exact scope:
+Production scan:
 
 ```bash
-git diff --name-only origin/main...HEAD
-rg "EcsBridge|bevy_mcp_limit|standalone_ecs|install_bridge_dependency" src crates fixtures scripts package.json Cargo.toml
+rg "EcsBridge|bevy_mcp_limit|standalone_ecs|install_bridge_dependency|BEVY_MCP_PORT" src crates fixtures scripts package.json Cargo.toml
 ```
 
-Expected for the `rg` command: no production implementation of those deferred/removed concepts. Documentation may mention `EcsBridge` or standalone ECS only as future direction.
+Expected: no production matches. Documentation may mention `EcsBridge`/standalone only as future direction.
 
-Also verify no game-specific names:
+Game-specific scan:
 
 ```bash
 rg -i "scorpius|caelum|battle_snapshot|transport_demand" src crates fixtures scripts
@@ -1339,23 +1039,21 @@ rg -i "scorpius|caelum|battle_snapshot|transport_demand" src crates fixtures scr
 
 Expected: no matches.
 
-- [ ] **Step 8: Commit Task 6 and keep working on PR #1**
+Verify PR diff and ensure implementation stays on PR #1.
 
-Commit:
+- [ ] **Step 8: Commit and update the existing draft PR**
 
 ```bash
-git add README.md plugin.json mcp.json plugins .agents .claude-plugin scripts/smoke-packed-cli.mjs .github package.json src
+git add README.md plugin.json mcp.json plugins .agents .claude-plugin scripts/smoke-packed-cli.mjs .github src/packaging
  git commit -m "docs: package generic Bevy agent plugin"
 ```
 
-Push the existing `agent/generic-bevy-mcp-design` branch. Update draft PR #1 with implementation results and verification evidence. **Do not open another pull request.**
+Push `agent/generic-bevy-mcp-design`, update PR #1 with implementation/verification evidence, and keep it as the only PR for this task.
 
 ---
 
 ## Deferred standalone ECS rule
 
-There is intentionally no implementation task for standalone `bevy_ecs::World` in v1.
+No standalone ECS implementation is hidden inside v1.
 
-When a real host exists, write a new design slice that keeps the same npm MCP/tool surface and extends `bevy-mcp-bridge` with a caller-polled transport. That slice must use the public Bevy 0.19-style `bevy_remote::builtin_methods` handlers against the host's `World`/`AppTypeRegistry` rather than hand-writing BRP query/get/mutate/schema behavior.
-
-This is a future task, not a hidden partial implementation in Tasks 1-6.
+When a real caller-owned `bevy_ecs::World` host exists, create a new design slice that keeps the same npm MCP/tool surface and extends the Rust crate with a caller-polled transport. That future implementation must use the world's `AppTypeRegistry` and public `bevy_remote::builtin_methods` handlers rather than hand-writing BRP query/get/mutate/schema behavior.
