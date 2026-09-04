@@ -4,122 +4,117 @@
 
 Revised after design review on September 4, 2026.
 
-This document defines a generic Bevy developer MCP. V1 deliberately contains no Scorpius-, Caelum-, or other game-specific operations.
+V1 is a **generic full-Bevy developer MCP**. It deliberately contains no Scorpius-, Caelum-, or other game-specific operations, and it does not ship a second transport for standalone `bevy_ecs::World` yet.
+
+## Review resolutions
+
+The September 4 review is incorporated as follows:
+
+1. **No private BRP implementation.** Bevy 0.19 exposes public `bevy_remote::builtin_methods` handlers that take `&mut World`. If standalone ECS support is added later, it will dispatch to those handlers instead of reimplementing query/get/mutate/schema logic.
+2. **Standalone ECS is deferred from v1.** There is no current standalone `bevy_ecs` consumer. Capability-based design remains, but the second HTTP bridge and ECS-only fixture are removed until a real host exists.
+3. **No automatic bridge installation.** V1 exposes setup/status instructions using a Git dependency. The npm release workflow is included so plugin metadata that points at `@cwchanap/bevy-plugin@0.1.0` has an actual publication path.
+4. **Capabilities come from `rpc.discover`.** Render/input/diagnostics/shutdown/time are never hardcoded merely because a plugin is present.
+5. **Screenshots are bounded.** PNG signature, IHDR dimensions, and a 16 MiB file cap are validated before base64 reaches the agent.
+6. **Task order is executable.** Cargo workspace members are created in the same task as their files, packed smoke uses the MCP v2 client package, and all work continues on PR #1.
+7. **Read results are typed.** The MCP pins stable result shapes for list/entity/resource/query/schema tools instead of leaking unspecified BRP responses.
 
 ## Context
 
-The goal is a reusable local developer tool analogous in product shape to `cwchanap/godot-mcp`: install one MCP/plugin package into Codex, Claude Code, Pi, Cursor, or another MCP-compatible agent, point it at a Rust workspace, and let the agent run and debug a Bevy application through a stable generic tool surface.
+The product goal is analogous to `cwchanap/godot-mcp`: one agent-neutral stdio MCP package, usable from Codex, Claude Code, Pi, Cursor, or another MCP-compatible client, that can launch and debug a local engine runtime.
 
-The first concrete consumer is a normal Bevy 0.19 application. Bevy already provides most of the runtime protocol we need:
+Bevy 0.19 already provides most runtime capabilities needed:
 
-- Bevy Remote Protocol (BRP) exposes reflected ECS inspection/mutation, registry schema, method discovery, and related generic operations over JSON-RPC.
-- `bevy_brp_extras` 0.22.3 adds screenshot capture, shutdown, keyboard/mouse control, and FPS/frame-time diagnostics for Bevy 0.19 apps.
+- **Bevy Remote Protocol (BRP)**: reflected ECS inspection/mutation, registry schema, method discovery, and generic remote control over JSON-RPC.
+- **`bevy_brp_extras` 0.22.3**: screenshot capture, graceful shutdown, keyboard input, text input, mouse control, and FPS/frame-time diagnostics.
 
-V1 should compose those existing capabilities instead of implementing a second remote protocol.
-
-A future standalone `bevy_ecs::World` host remains an expected extension case, but no current project uses that shape yet. Caelum plans to introduce standalone `bevy_ecs` later; building a second HTTP/BRP stack before that host exists is unnecessary v1 scope.
+V1 should compose those mechanisms rather than duplicate them.
 
 ## Product goal
 
-Build one generic MCP server and small companion Bevy plugin that let an agent:
+An agent should be able to:
 
-- discover executable Bevy targets in a Cargo workspace;
+- discover Bevy executable targets from Cargo metadata;
 - build/run/stop/restart one managed target;
-- capture bounded stdout/stderr debug output;
-- discover the live remote method/capability surface;
-- inspect reflected ECS components/resources and registry schemas;
-- query entities and read individual entity/resource state;
-- perform generic reflected ECS mutations;
-- inspect broad world/runtime diagnostics;
+- read bounded stdout/stderr;
+- discover the live remote-method/capability surface;
+- list/query/read reflected ECS components and resources;
+- mutate reflected ECS state using standard BRP operations;
+- inspect cheap world statistics;
 - pause/resume/change Bevy virtual-time scale;
-- send keyboard and mouse input;
+- send keyboard/text/mouse input;
 - capture validated screenshots;
+- query Bevy diagnostics;
 - gracefully shut down the runtime;
-- call newly discovered remote methods through one raw escape hatch;
-- install through the same npm MCP binary from Agent Plugins/Codex/Claude wrappers.
+- call newly discovered BRP methods through one generic raw escape hatch;
+- install the MCP through one npm binary and thin agent-plugin metadata wrappers.
 
 ## Non-goals
 
 V1 does **not** include:
 
-- project/game-specific MCP tools or semantic operations;
+- game-specific or semantic debug operations;
 - standalone `bevy_ecs::World` transport;
-- application-authored debug command frameworks;
-- save manipulation, gameplay assertions, or test DSLs;
+- save-state manipulation;
+- gameplay assertion/test DSLs;
 - deterministic replay or `step_frame`;
 - frame/render debugger or schedule profiler;
-- browser/WASM runtime transport;
-- remote-machine/network debugging;
-- OS-level keyboard/mouse automation;
-- arbitrary Bevy asset/scene authoring;
+- WASM/browser relay;
+- remote-machine debugging;
+- OS-level input automation;
+- scene/asset authoring;
 - automatic Rust source rewriting;
 - Bevy-version compatibility shims;
-- backward compatibility with pre-release layouts;
-- a generic engine abstraction shared with Godot.
+- a cross-engine abstraction shared with Godot.
 
 ## Compatibility baseline
 
-V1 targets one stack only:
+- Bevy: `0.19.x`
+- `bevy_brp_extras`: `0.22.3`
+- Rust: `>=1.95.0`, edition 2024 for repository-owned Rust code
+- Node.js: `>=20`
+- MCP TypeScript SDK: stable v2 packages for the 2026-07-28 MCP specification
+- Zod: v4
+- Agent Plugins: `1.0.0`
+- native macOS/Linux/Windows runtime debugging only
 
-- Bevy: `0.19.x`;
-- `bevy_brp_extras`: `0.22.3`;
-- Rust: `>=1.95.0`, edition 2024 for repository-owned Rust code;
-- Node.js: `>=20`;
-- MCP TypeScript SDK: stable v2 packages implementing the 2026-07-28 MCP specification;
-- Zod: v4;
-- Agent Plugins specification: `1.0.0`;
-- native macOS/Linux/Windows runtime debugging only.
+A later Bevy release gets an explicit version update, not a v1 compatibility layer.
 
-A future Bevy release gets an explicit version update instead of a compatibility layer.
-
-## Architecture decision
-
-Use one Node/TypeScript stdio MCP server in front of the official Bevy remote stack.
+## Architecture
 
 ```text
-Codex / Claude Code / Pi / Cursor / other MCP clients
+Codex / Claude Code / Pi / Cursor / MCP clients
                          |
                          | MCP stdio
                          v
               @cwchanap/bevy-plugin
               Node / TypeScript server
                          |
-             localhost JSON-RPC / BRP
+                 localhost BRP
                          |
                          v
                   Bevy application
-             Bevy Remote Protocol
-              + bevy_brp_extras
-              + BevyMcpPlugin
+              BRP + BrpExtrasPlugin
+                  + BevyMcpPlugin
 ```
 
-The MCP owns the agent-facing tool contract. Bevy owns generic ECS protocol behavior. `bevy_brp_extras` owns screenshot/input/diagnostics/shutdown behavior. `BevyMcpPlugin` only supplies the small generic features missing from those layers.
+Responsibilities:
 
-### Why not wrap `bevy_brp_mcp` directly?
+- **Node MCP**: Cargo discovery, process/log ownership, capability probing, MCP schemas, BRP translation, screenshot file validation, plugin packaging.
+- **BRP**: generic ECS operations and schema/method discovery.
+- **`bevy_brp_extras`**: screenshot/input/diagnostics/shutdown.
+- **`BevyMcpPlugin`**: only the generic operations not supplied above: world statistics and virtual-time control.
 
-`bevy_brp_mcp` is a useful reference implementation, but this project wants its own stable tool names, process-management behavior, plugin packaging, and future extension seam. Reusing BRP does not require inheriting another MCP server's public contract.
-
-### Why not implement a private BRP subset?
-
-Bevy 0.19 publicly exposes its built-in BRP handlers as systems taking `&mut World`, including query/get/list/spawn/despawn/insert/remove/mutate and registry schema handlers. If standalone ECS support is added later, the bridge should dispatch to those built-ins at a caller-controlled `World` polling boundary rather than duplicate their serialization/error semantics.
-
-There is no `reflect.rs` protocol reimplementation in v1 or in the intended future standalone design.
+The MCP owns the agent-facing contract but not a replacement engine protocol.
 
 ## Companion Rust plugin
 
-The repository owns one crate:
+Repository crate:
 
 ```text
 crates/bevy-mcp-bridge
 ```
 
-The crate exposes:
-
-```rust
-pub struct BevyMcpPlugin;
-```
-
-Typical integration:
+Public integration:
 
 ```rust
 App::new()
@@ -131,17 +126,16 @@ App::new()
 `BevyMcpPlugin`:
 
 1. composes `bevy_brp_extras::BrpExtrasPlugin`;
-2. registers `bevy_mcp/world_stats`;
-3. registers `bevy_mcp/time_control`;
-4. honors the same loopback port used by the MCP-managed process.
+2. registers `bevy_mcp/world_stats` in the live `RemoteMethods` resource;
+3. registers `bevy_mcp/time_control` in the live `RemoteMethods` resource.
 
-It does **not** wrap or replace BRP world methods.
+It has no separate HTTP server. `BrpExtrasPlugin`/Bevy HTTP remains authoritative and defaults to loopback `127.0.0.1:15702`; `BRP_EXTRAS_PORT` is the only port environment variable v1 needs.
 
-Projects that already expose standard BRP/`bevy_brp_extras` can use most MCP tools without this crate. The companion plugin only adds the repository-owned time/world-stat methods and gives one recommended setup path.
+Projects already using standard BRP/`bevy_brp_extras` can use the standard subset of MCP tools without `BevyMcpPlugin`. The bridge only adds time control/world stats and provides one recommended setup path.
 
 ## Reflection boundary
 
-Generic ECS tools only operate on types Bevy can reflect and that the app registers in its type registry.
+Generic ECS tools operate only on Bevy-reflectable registered types.
 
 Example:
 
@@ -156,13 +150,13 @@ struct Health {
 app.register_type::<Health>();
 ```
 
-The MCP does not inspect arbitrary Rust memory and does not invent a second serde registration framework.
+Installing the bridge does not make opaque game-owned values inspectable automatically. The README must state this prominently.
 
-The README must explicitly explain that installing the plugin alone does not make opaque game-owned resources/components remotely inspectable; those types need normal Bevy reflection registration.
+No unsafe memory inspection or parallel serde/debug registry is added.
 
-## Runtime capability model
+## Capability model
 
-`get_runtime_status` probes `rpc.discover` and derives capabilities from the methods the runtime actually advertises. Do not hardcode `render`, `input`, `diagnostics`, or shutdown support merely because `BevyMcpPlugin` is present.
+`get_runtime_status` calls `rpc.discover` and derives capability flags from exact method names.
 
 ```ts
 export interface RuntimeCapabilities {
@@ -179,32 +173,32 @@ export interface RuntimeCapabilities {
 }
 ```
 
-Derivation:
+Rules:
 
-- `process`: true only when this MCP owns the running child;
-- `ecsRead`: required BRP read methods are discovered;
-- `ecsWrite`: required BRP mutation methods are discovered;
-- `registrySchema`: `registry.schema` is discovered;
-- `app`: a reachable BRP endpoint represents a Bevy app;
-- `render`: `brp_extras/screenshot` is discovered;
-- `input`: required keyboard/mouse methods are discovered;
-- `virtualTime`: `bevy_mcp/time_control` is discovered;
-- `diagnostics`: `brp_extras/get_diagnostics` is discovered;
-- `gracefulShutdown`: `brp_extras/shutdown` is discovered.
+- `process`: true only for the MCP-owned child;
+- `app`: true for a reachable BRP application endpoint;
+- `ecsRead`: required BRP read methods discovered;
+- `ecsWrite`: required BRP mutation methods discovered;
+- `registrySchema`: `registry.schema` discovered;
+- `render`: `brp_extras/screenshot` discovered;
+- `input`: the required extras keyboard/mouse methods discovered;
+- `virtualTime`: `bevy_mcp/time_control` discovered;
+- `diagnostics`: `brp_extras/get_diagnostics` discovered;
+- `gracefulShutdown`: `brp_extras/shutdown` discovered.
 
-These flags describe remotely advertised operations. Individual calls can still return normal runtime errors when their current app preconditions are absent (for example, screenshot with no eligible window/camera).
+Capabilities mean an operation is remotely advertised. A specific call can still fail for runtime preconditions, such as screenshot with no eligible window/camera.
 
-A tool requiring a missing capability returns `unsupported_capability`; it does not emulate the feature.
+Missing methods return `unsupported_capability`; the MCP does not emulate them.
 
-## Cargo target discovery
+## Cargo discovery and process lifecycle
 
-Use:
+Use only:
 
 ```text
 cargo metadata --no-deps --format-version=1
 ```
 
-as the only workspace/target authority.
+for workspace/target discovery.
 
 ```ts
 export interface BevyTarget {
@@ -216,36 +210,34 @@ export interface BevyTarget {
 }
 ```
 
-`runtimeKind` is inferred only from direct dependency names and is informational. Live operations are authorized by `rpc.discover`, not static dependency inference.
+`runtimeKind` is informational only. Runtime authorization comes from live discovery.
 
-No recursive Rust source parser is needed.
+Process tools:
 
-## Process lifecycle
+```text
+list_bevy_targets
+build_bevy
+run_bevy
+stop_bevy
+restart_bevy
+get_debug_output
+```
 
-The MCP manages at most one child process per server process in v1.
+Rules:
 
-`run_bevy`:
+- Cargo is always invoked with argv, never shell strings.
+- One managed child per MCP server process.
+- `run_bevy` sets `BRP_EXTRAS_PORT` for the selected runtime port.
+- stdout/stderr keep a 5000-line ring buffer plus a temp log file.
+- `get_debug_output` defaults to 200 lines and caps at 5000.
+- `stop_bevy` tries advertised `brp_extras/shutdown`, waits at most 2 seconds, then terminates the managed child if necessary.
+- `restart_bevy` reuses the previous launch spec.
 
-- resolves an exact target from `list_bevy_targets`;
-- uses argv-based `cargo run`, never a shell string;
-- forwards optional app args after `--`;
-- sets `BEVY_MCP_PORT` and `BRP_EXTRAS_PORT` to the selected port;
-- captures stdout/stderr into a bounded 5000-line in-memory tail and a temp log file;
-- returns after spawn rather than blocking for game exit.
-
-`stop_bevy`:
-
-1. calls generic graceful shutdown when advertised;
-2. waits up to 2 seconds;
-3. terminates the managed child if still alive.
-
-`restart_bevy` reuses the last launch specification.
-
-External processes can be inspected by port but cannot expose historical stdout/stderr through this MCP.
+External BRP apps may be inspected by port, but historical logs are unavailable if the MCP did not launch them.
 
 ## Runtime client
 
-Use one small `RuntimeClient` around built-in `fetch`:
+One client:
 
 ```ts
 class RuntimeClient {
@@ -254,17 +246,11 @@ class RuntimeClient {
 }
 ```
 
-Rules:
+It uses built-in `fetch` against `http://127.0.0.1:<port>/`, applies a five-second timeout, parses JSON-RPC success/error explicitly, and maps failures into the MCP error model.
 
-- connect only to `http://127.0.0.1:<port>/`;
-- 5-second request timeout;
-- parse JSON-RPC success/error explicitly;
-- map transport failures into stable MCP-facing errors;
-- no retries, auth, TLS, daemon, or connection pool in v1.
+No retries, auth, TLS, daemon, or connection pool.
 
-## Agent-facing read contracts
-
-Do not leak unspecified "whatever BRP returned" shapes from tool handlers. V1 pins these normalized MCP result types.
+## Stable read contracts
 
 ```ts
 export interface ListComponentsResult {
@@ -308,24 +294,13 @@ export interface QueryEntitiesResult {
 }
 ```
 
-Bevy's documented non-strict `world.get_components` response includes separate `components` and `errors` maps; normalize both into `EntitySnapshot` instead of discarding the distinction.
+`get_entity` preserves Bevy's non-strict `components` and `errors` distinction instead of flattening it away.
 
-`registry.schema` remains authoritative; `TypeSchemaResult` only wraps its returned schema under a stable MCP key.
+`get_type_schema` wraps standard `registry.schema` output under `schema`; there is no second schema exporter.
 
-## MCP tool surface
+## ECS tool surface
 
-### Project/process
-
-```text
-list_bevy_targets
-run_bevy
-stop_bevy
-restart_bevy
-get_debug_output
-get_runtime_status
-```
-
-### ECS discovery/read
+Read:
 
 ```text
 list_components
@@ -337,7 +312,22 @@ get_resource
 get_world_stats
 ```
 
-`query_entities` accepts:
+Mutation:
+
+```text
+spawn_entity
+remove_entity
+set_components
+mutate_component
+remove_components
+set_resource
+mutate_resource
+remove_resource
+```
+
+Mappings use standard BRP names such as `world.query`, `world.get_components`, `world.get_resources`, `world.insert_components`, and `world.mutate_resources`.
+
+`query_entities` forwards the normal BRP query model:
 
 ```ts
 export interface QueryEntitiesInput {
@@ -352,26 +342,9 @@ export interface QueryEntitiesInput {
 }
 ```
 
-The MCP forwards the standard BRP query shape. `limit` is an **agent-response cap**, not a nonstandard BRP parameter. It defaults to 200 and may not exceed 2000. The MCP truncates the BRP result before returning it to the agent.
+`limit` is only an MCP response cap: default 200, maximum 2000. It is never sent to BRP and there is no `bevy_mcp_limit` dialect.
 
-Do not invent `bevy_mcp_limit` or another private query dialect.
-
-### ECS mutation
-
-```text
-spawn_entity
-remove_entity
-set_components
-mutate_component
-remove_components
-set_resource
-mutate_resource
-remove_resource
-```
-
-These are thin validated mappings onto standard BRP methods. Mutation tools do not add game-aware validation.
-
-### App control
+## App control
 
 ```text
 control_time
@@ -382,7 +355,7 @@ capture_screenshot
 shutdown_runtime
 ```
 
-`control_time` accepts exactly:
+`control_time`:
 
 ```ts
 type TimeControl =
@@ -393,23 +366,53 @@ type TimeControl =
 
 `scale` must be finite and greater than zero.
 
-V1 deliberately does not expose `step_frame`. Pausing virtual time is not equivalent to stopping every system scheduled each frame.
+No `step_frame`: virtual-time pause is not a generic whole-app frame stepper.
 
-`mouse_input` accepts:
+### Mouse operations
+
+V1 exposes only operations actually provided by `bevy_brp_extras`:
 
 ```text
 move
 click
 double_click
-button_down
-button_up
+press
 drag
 scroll
 ```
 
-and maps onto `bevy_brp_extras` methods. No OS accessibility automation is used.
+Mappings:
 
-### Diagnostics/protocol escape hatch
+```text
+move         -> brp_extras/move_mouse
+click        -> brp_extras/click_mouse
+double_click -> brp_extras/double_click_mouse
+press        -> brp_extras/send_mouse_button   # timed press-hold-release
+drag         -> brp_extras/drag_mouse
+scroll       -> brp_extras/scroll_mouse
+```
+
+There are no persistent `button_down`/`button_up` actions because `bevy_brp_extras` does not provide those semantics.
+
+No OS accessibility APIs are used.
+
+## Screenshots
+
+`capture_screenshot` calls `brp_extras/screenshot` with a temp `.png` path and optional camera/entity/padding parameters.
+
+Before returning image content:
+
+1. `stat` the file;
+2. reject empty or >16 MiB files before full read;
+3. validate the eight-byte PNG signature;
+4. validate a complete IHDR header;
+5. require positive width and height;
+6. read/encode the validated file;
+7. delete the temp file in `finally`.
+
+Malformed/oversized screenshots fail rather than entering agent context.
+
+## Diagnostics and raw method escape hatch
 
 ```text
 get_diagnostics
@@ -417,43 +420,15 @@ list_remote_methods
 call_remote_method
 ```
 
-`list_remote_methods` maps to `rpc.discover`.
+- `get_diagnostics` -> `brp_extras/get_diagnostics`
+- `list_remote_methods` -> `rpc.discover`
+- `call_remote_method` accepts only a method present in the latest discovery response and forwards raw JSON params/result.
 
-`call_remote_method` accepts only a method name present in the latest discovery response plus raw JSON params. It exists so agents can experiment with newly available BRP methods without a new MCP release. It is not a game-specific extension framework.
-
-## Screenshots
-
-`capture_screenshot` is a first-class tool backed by `brp_extras/screenshot`.
-
-Input:
-
-```ts
-export interface ScreenshotInput {
-  port?: number;
-  cameraEntity?: number;
-  entity?: number;
-  padding?: number;
-}
-```
-
-The MCP creates a temp `.png` path, asks the runtime to write the screenshot, validates the resulting file, returns MCP image content, and deletes the temp file in `finally`.
-
-Before reading/encoding the whole image:
-
-1. `stat` the file and reject files larger than 16 MiB;
-2. read the PNG header;
-3. require the eight-byte PNG signature;
-4. require a valid IHDR with positive width/height;
-5. read at most the validated file size;
-6. return `image/png` MCP content.
-
-No oversized or malformed PNG reaches the agent as a base64 payload.
+The escape hatch allows new BRP methods to be tried without creating project-specific MCP tools.
 
 ## World statistics
 
-`bevy_mcp/world_stats` is repository-owned because BRP does not provide the exact summary tool wanted by agents.
-
-Return only cheap aggregate information:
+`bevy_mcp/world_stats` returns cheap aggregate state only:
 
 ```ts
 export interface WorldStats {
@@ -463,57 +438,52 @@ export interface WorldStats {
 }
 ```
 
-Do not turn this into a profiler or historical metrics store.
+Component counts are derived from current archetypes. No timing/history/profiling store.
 
 ## Virtual time
 
-`bevy_mcp/time_control` operates on Bevy `Time<Virtual>`:
+`bevy_mcp/time_control` operates on `Time<Virtual>`:
 
-- pause;
-- resume;
-- set finite relative speed greater than zero.
+- `pause()`
+- `unpause()`
+- `set_relative_speed(scale)`
 
-It does not promise deterministic frame stepping.
+It returns the resulting paused/relative-speed state.
 
-## Bridge setup and status
+## Bridge setup/status
 
-V1 does not automatically edit `Cargo.toml` or Rust source.
-
-Expose:
+V1 exposes:
 
 ```text
 get_bridge_status
 get_bridge_setup
 ```
 
-`get_bridge_status` reports:
+`get_bridge_status` combines Cargo metadata and live `rpc.discover` to report dependency presence and availability of `bevy_mcp/world_stats`/`bevy_mcp/time_control`.
 
-- whether Cargo metadata shows `bevy-mcp-bridge` as a dependency for the selected package;
-- whether the running endpoint exposes `bevy_mcp/world_stats` and `bevy_mcp/time_control`.
-
-`get_bridge_setup` returns copyable integration instructions, using the repository Git dependency until the Rust crate is intentionally published:
+`get_bridge_setup` returns copyable instructions only:
 
 ```bash
 cargo add bevy-mcp-bridge --git https://github.com/cwchanap/bevy-mcp
 ```
 
-and:
-
 ```rust
 .add_plugins(bevy_mcp_bridge::BevyMcpPlugin)
 ```
 
-There is no `install_bridge_dependency` tool in v1.
+There is no `install_bridge_dependency` and no Rust-source rewrite.
 
-## npm/plugin distribution
+The Rust crate uses the Git dependency in v1; crates.io publication is not required.
 
-The MCP server is published as:
+## npm and agent-plugin distribution
+
+Server package:
 
 ```text
 @cwchanap/bevy-plugin
 ```
 
-The repository ships the same metadata shape used by `godot-mcp`:
+Metadata layout:
 
 ```text
 plugin.json
@@ -525,15 +495,13 @@ plugins/bevy-plugin/.claude-plugin/plugin.json
 .claude-plugin/marketplace.json
 ```
 
-All wrappers invoke one stdio MCP binary. There is no Codex-specific or Claude-specific server.
+Every wrapper starts the same stdio package. There is no client-specific MCP implementation.
 
-The release workflow must publish npm on a GitHub Release or explicit manual publish trigger. Agent metadata may pin `@cwchanap/bevy-plugin@0.1.0`; it becomes usable once that release is published. CI must not claim marketplace installation works before npm publication.
+The GitHub Actions workflow publishes npm on GitHub Release publication or explicit manual publish trigger using `NPM_TOKEN`, mirroring the existing Godot plugin release shape.
 
-The Rust bridge uses the Git dependency in v1; crates.io publication is not required for the first MCP release.
+Agent metadata may pin `@cwchanap/bevy-plugin@0.1.0`; it becomes usable once that npm release is published.
 
 ## Packed MCP smoke
-
-The packed-package smoke uses the MCP v2 client package, not a hand-written initialize packet.
 
 Dev dependency:
 
@@ -541,43 +509,49 @@ Dev dependency:
 @modelcontextprotocol/client
 ```
 
-The smoke:
+The smoke must:
 
 1. `npm pack`;
-2. starts the packed `bevy-plugin` binary with `StdioClientTransport`;
-3. performs the MCP initialize handshake through `Client.connect()`;
-4. lists tools;
-5. asserts core generic tool names;
-6. closes the client/process cleanly.
+2. install the tarball in a temp directory;
+3. start its binary with `StdioClientTransport`;
+4. connect using `Client.connect()` (real initialize handshake);
+5. list tools;
+6. assert core generic tools;
+7. close/delete temporary artifacts.
 
-## Full-App integration fixture
+No hand-written MCP initialize packets.
 
-The repository has exactly one runtime fixture in v1:
+## Integration fixture
+
+V1 has one runtime fixture:
 
 ```text
 fixtures/full-app
 ```
 
-It uses a normal Bevy app, registers a small reflected component/resource, includes `BevyMcpPlugin`, and renders enough UI/world content to exercise screenshot and input under Xvfb on Linux CI.
+It is a real Bevy application with:
 
-Integration coverage must prove one end-to-end journey:
+- one reflected component;
+- one reflected resource changed by injected keyboard input;
+- one camera and visible primitive for screenshot proof;
+- `BevyMcpPlugin`.
 
-1. launch fixture through the MCP process manager;
-2. wait for `rpc.discover`;
-3. inspect reflected ECS state;
-4. mutate one reflected field;
-5. pause/resume or change virtual-time scale;
-6. inject one input action whose reflected state changes;
-7. capture and validate a screenshot;
-8. query diagnostics/world stats;
-9. gracefully stop the app;
-10. assert the process exits and logs are readable.
+One MCP-client-driven Xvfb journey proves:
 
-Do not add an ECS-only fixture in v1.
+1. target discovery + launch;
+2. `rpc.discover`/capabilities;
+3. ECS read + mutation;
+4. virtual-time control;
+5. input changes reflected state;
+6. screenshot validation;
+7. diagnostics/world stats;
+8. graceful stop + logs.
+
+No ECS-only fixture in v1.
 
 ## Future standalone ECS extension
 
-When a real standalone `bevy_ecs::World` consumer exists, extend the same Rust crate rather than create a second server/package.
+When a real standalone `bevy_ecs::World` host exists, extend the same Rust crate and MCP contract.
 
 Expected shape:
 
@@ -585,21 +559,19 @@ Expected shape:
 HTTP thread -> request channel -> EcsBridge::poll(&mut World) -> response channel
 ```
 
-Constraints for that future work:
+Required constraints:
 
-- caller retains `World`/schedule ownership;
-- insert/use the world's `AppTypeRegistry` for debug-visible types;
-- dispatch standard verbs to public `bevy_remote::builtin_methods` handlers;
-- reuse standard BRP method names, entity encoding, schema, and errors;
-- no private `reflect.rs` protocol implementation;
-- no standalone-only query-limit parameter;
-- renderer/input/virtual-time/BRP-extras capabilities remain unsupported unless the host actually exposes them.
+- caller retains `World` and schedule ownership;
+- use the world's `AppTypeRegistry`;
+- dispatch standard methods through public `bevy_remote::builtin_methods` handlers;
+- preserve standard BRP method names, entity encoding, schema, and errors;
+- no private reflection serializer/protocol implementation;
+- no standalone-only query-limit field;
+- render/input/time/diagnostics remain unsupported unless actually supplied by that host.
 
-That future slice starts only when a real consumer can validate it.
+This is a future slice only when a real consumer can validate it.
 
 ## Error model
-
-MCP-facing failures use a small stable set:
 
 ```text
 invalid_request
@@ -613,52 +585,45 @@ remote_error
 io_error
 ```
 
-Preserve the remote BRP message/code inside `remote_error` details where useful. Do not create an error hierarchy mirroring every BRP code.
+Preserve BRP code/message in `remote_error` details where useful; do not mirror every BRP error as a new MCP error class.
 
 ## Security boundary
 
-This is a local development tool.
+Local development only:
 
-V1:
-
-- binds/connects only to loopback;
-- executes Cargo via argv, not shell strings;
-- only runs targets returned by Cargo metadata;
-- does not expose arbitrary shell execution;
-- uses no auth/TLS/retry framework;
-- validates screenshot size/type before returning image content.
-
-No production hardening framework is required.
+- connect/bind through Bevy's loopback defaults;
+- Cargo argv only, no arbitrary shell tool;
+- runtime targets must come from Cargo metadata;
+- no auth/TLS/retry framework;
+- screenshot payload validation before agent return.
 
 ## Testing strategy
 
-Use three layers only:
+Three layers only:
 
-1. **TypeScript unit tests** — Cargo parsing, process lifecycle, JSON-RPC mapping, normalized tool contracts, capability derivation, screenshot validation, packaging metadata.
-2. **Rust tests** — `BevyMcpPlugin` registration, world stats, virtual-time control.
-3. **One native full-app integration fixture** — process + BRP + reflection + mutation + input + screenshot + diagnostics + shutdown.
+1. **TypeScript unit tests**: Cargo/process, JSON-RPC, capability derivation, normalized tools, screenshot validation, metadata.
+2. **Rust tests**: bridge plugin registration, world stats, virtual-time control.
+3. **One full-app integration fixture**: real process + BRP + reflection + input + screenshot + diagnostics + shutdown under Xvfb.
 
-Do not duplicate every BRP behavior in repository tests; Bevy owns those protocol implementations.
+Do not duplicate BRP's own behavior tests.
 
 ## Delivery boundary
 
-This task remains one PR: PR #1.
-
-The PR begins with these planning docs and, after approval, implementation continues on the same branch/PR. Do not open a second implementation PR.
+This task remains **PR #1**. Planning and implementation stay on `agent/generic-bevy-mcp-design`; no second PR is opened.
 
 V1 is complete when:
 
-- the npm MCP package builds and its packed stdio smoke passes;
-- Cargo target discovery/process/log tools work;
-- generic reflected ECS read/write tools work through standard BRP;
-- normalized read result shapes are tested;
-- runtime capabilities are derived from `rpc.discover`;
-- `BevyMcpPlugin` adds only world stats/time control on top of BRP extras;
-- input, screenshot, diagnostics, and shutdown reuse `bevy_brp_extras`;
-- screenshot payloads are size/signature/dimension validated;
-- bridge setup/status provides Git-dependency instructions without source rewriting;
-- the full-app integration journey passes under CI;
-- Codex/Claude/Agent Plugins metadata points at the one npm binary;
-- release automation can publish `@cwchanap/bevy-plugin` to npm;
-- README documents reflection requirements and the future standalone extension seam;
+- npm package builds and packed-client smoke passes;
+- Cargo discovery/build/run/log tools work;
+- generic reflected ECS read/write tools use standard BRP;
+- stable read result shapes are tested;
+- capabilities derive from `rpc.discover`;
+- bridge adds only world stats/time control on top of BRP extras;
+- input/screenshot/diagnostics/shutdown reuse `bevy_brp_extras`;
+- screenshot size/signature/dimensions are validated;
+- bridge setup/status returns Git instructions without editing user source;
+- one real full-app integration journey passes;
+- agent plugin metadata invokes one npm binary;
+- npm release automation exists;
+- README documents reflection requirements and the future standalone seam;
 - no game-specific or standalone-ECS implementation ships in v1.
