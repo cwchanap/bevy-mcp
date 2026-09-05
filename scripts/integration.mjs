@@ -95,21 +95,16 @@ async function main() {
 
   async function shutdownFixture() {
     if (!fixtureUp) return;
+    const result = await callTool('brp_shutdown', { app_name: FIXTURE, port: PORT });
     fixtureUp = false;
-    try {
-      const result = await callTool('brp_shutdown', { app_name: FIXTURE, port: PORT });
-      const pid = result?.metadata?.pid;
-      assert.ok(typeof pid === 'number' && pid > 0, `shutdown must report a pid, got ${pid}`);
-      await eventually(() => !processAlive(pid), {
-        label: `fixture process ${pid} to exit`,
-        timeoutMs: EXIT_TIMEOUT,
-        delayMs: 250,
-      });
-      log(`fixture process ${pid} exited (${result?.metadata?.method ?? 'shutdown'})`);
-    } catch (err) {
-      console.error(`[integration] WARNING: fixture shutdown failed: ${err.message}`);
-      throw err;
-    }
+    const pid = result?.metadata?.pid;
+    assert.ok(typeof pid === 'number' && pid > 0, `shutdown must report a pid, got ${pid}`);
+    await eventually(() => !processAlive(pid), {
+      label: `fixture process ${pid} to exit`,
+      timeoutMs: EXIT_TIMEOUT,
+      delayMs: 250,
+    });
+    log(`fixture process ${pid} exited (${result?.metadata?.method ?? 'shutdown'})`);
   }
 
   async function dumpFixtureLog() {
@@ -260,7 +255,7 @@ async function main() {
     try {
       await shutdownFixture();
     } catch {
-      // already warned inside
+      // best-effort; the original failure is already logged above
     }
   } finally {
     await client.close().catch(() => {});
@@ -280,4 +275,7 @@ async function main() {
   }
 }
 
-main().catch(() => process.exit(1));
+main().catch((err) => {
+  console.error(`[integration] FAIL: ${err.message}`);
+  process.exit(1);
+});
