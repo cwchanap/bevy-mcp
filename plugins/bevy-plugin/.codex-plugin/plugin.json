@@ -1,0 +1,28 @@
+{
+  "name": "bevy-plugin",
+  "version": "0.1.0",
+  "description": "Connect Codex to local Bevy projects through the Bevy BRP MCP server.",
+  "author": {
+    "name": "cwchanap",
+    "url": "https://github.com/cwchanap"
+  },
+  "homepage": "https://github.com/cwchanap/bevy-mcp",
+  "repository": "https://github.com/cwchanap/bevy-mcp",
+  "license": "MIT",
+  "keywords": ["bevy", "mcp", "codex", "game-development"],
+  "mcpServers": "./.mcp.json",
+  "interface": {
+    "displayName": "Bevy Plugin",
+    "shortDescription": "Inspect, run, and control local Bevy projects.",
+    "longDescription": "Connect Codex to a running Bevy application through the Bevy Remote Protocol for entity inspection, component queries, scene operations, and runtime controls.",
+    "developerName": "cwchanap",
+    "category": "Developer Tools",
+    "capabilities": ["Read", "Write"],
+    "websiteURL": "https://github.com/cwchanap/bevy-mcp",
+    "defaultPrompt": [
+      "Inspect this Bevy project and summarize its structure.",
+      "Run this Bevy project and diagnose any errors.",
+      "Use Bevy tools to implement and verify this change."
+    ]
+  }
+}

@@ -1,0 +1,9 @@
+[package]
+name = "bevy-mcp-fixture"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+bevy = { version = "0.19.1", features = ["png"] }
+bevy-mcp-bridge = { path = "../../crates/bevy-mcp-bridge" }

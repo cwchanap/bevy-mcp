@@ -1,0 +1,27 @@
+{
+  "name": "@cwchanap/bevy-plugin",
+  "version": "0.1.0",
+  "description": "Agent-plugin distribution wrapper for the Bevy BRP MCP and bevy-mcp bridge.",
+  "type": "module",
+  "license": "MIT",
+  "bin": {
+    "bevy-plugin": "bin/bevy-plugin.mjs"
+  },
+  "files": [
+    "bin",
+    "src",
+    "plugin.json",
+    "mcp.json"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "test": "node --test test/*.test.mjs",
+    "test:integration": "node scripts/integration.mjs",
+    "smoke:packed": "node scripts/smoke-packed-cli.mjs"
+  },
+  "devDependencies": {
+    "@modelcontextprotocol/client": "^2.0.0"
+  }
+}
