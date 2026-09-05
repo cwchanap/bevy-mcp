@@ -61,7 +61,7 @@ If the upstream binary is missing, the launcher fails fast with the install comm
 
 ## Agent installation
 
-The same npm package powers all three plugin ecosystems (modeled after the Godot plugin marketplace flow):
+The same npm package powers every supported client (modeled after the Godot plugin marketplace flow):
 
 **Codex**
 
@@ -77,11 +77,16 @@ claude plugin marketplace add cwchanap/bevy-mcp
 claude plugin install bevy-plugin@cwchanap
 ```
 
-**Agent Plugins**
+**Pi (via community MCP adapter)**
+
+Pi has no built-in MCP support. Install the community adapter and Agent Plugins loader, then point Pi at this repository's portable package (`plugin.json` + root `mcp.json`):
 
 ```bash
-agent-plugins install cwchanap/bevy-mcp
+pi install npm:pi-mcp-adapter
+pi install npm:pi-agent-plugins
 ```
+
+The portable `plugin.json` / `mcp.json` this repo ships are the Agent Plugins 1.0 package; other Agent-Plugins-compatible clients load them through their own install flow.
 
 All of them resolve to `@cwchanap/bevy-plugin`, which launches the upstream `bevy_brp_mcp` server.
 
