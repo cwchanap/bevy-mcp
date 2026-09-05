@@ -77,6 +77,9 @@ async function main() {
     args: ['bin/bevy-plugin.mjs'],
     cwd: repoRoot,
     stderr: 'inherit',
+    // The SDK's default env whitelist drops DISPLAY — without the full env the
+    // fixture launched under xvfb-run cannot open a window and panics in winit.
+    env: { ...process.env },
   });
   const tmpDir = await mkdtemp(path.join(tmpdir(), 'bevy-plugin-integration-'));
 
