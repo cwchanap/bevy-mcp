@@ -113,7 +113,7 @@ async function main() {
     // ponytail: best-effort only — log reading must never mask the real failure
     try {
       const listed = await client.callTool(
-        { name: 'list_logs', arguments: { app_name: FIXTURE, verbose: false } },
+        { name: 'brp_list_logs', arguments: { app_name: FIXTURE, verbose: false } },
         { timeout: 15_000 },
       );
       assert.ok(!listed.isError, `list_logs failed: ${JSON.stringify(listed.content)}`);
@@ -124,7 +124,7 @@ async function main() {
       }
       const newest = logs[logs.length - 1];
       const res = await client.callTool(
-        { name: 'read_log', arguments: { filename: newest.filename, tail_lines: 80 } },
+        { name: 'brp_read_log', arguments: { filename: newest.filename, tail_lines: 80 } },
         { timeout: 15_000 },
       );
       const text = (res.content ?? []).map((c) => c.text ?? '').join('\n');
