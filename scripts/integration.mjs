@@ -96,7 +96,6 @@ async function main() {
   async function shutdownFixture() {
     if (!fixtureUp) return;
     const result = await callTool('brp_shutdown', { app_name: FIXTURE, port: PORT });
-    fixtureUp = false;
     const pid = result?.metadata?.pid;
     assert.ok(typeof pid === 'number' && pid > 0, `shutdown must report a pid, got ${pid}`);
     await eventually(() => !processAlive(pid), {
@@ -104,6 +103,7 @@ async function main() {
       timeoutMs: EXIT_TIMEOUT,
       delayMs: 250,
     });
+    fixtureUp = false;
     log(`fixture process ${pid} exited (${result?.metadata?.method ?? 'shutdown'})`);
   }
 

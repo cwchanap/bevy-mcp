@@ -11,7 +11,7 @@ The current published Bevy 0.19-compatible upstream is `bevy_brp_mcp` **0.22.3**
 This repository therefore owns only the missing generic value:
 
 1. a small Rust `bevy-mcp-bridge` plugin that registers bounded world statistics and virtual-time control as application BRP methods and publishes typed agent metadata for them; and
-2. an npm/Agent-Plugins distribution wrapper so Codex, Claude Code, Pi, Cursor, and other MCP clients can install one familiar plugin entrypoint while delegating the actual MCP server to upstream `bevy_brp_mcp`.
+2. an npm/Agent-Plugins distribution wrapper so Codex, Claude Code, Cursor, and other MCP clients can install one familiar plugin entrypoint while delegating the actual MCP server to upstream `bevy_brp_mcp`. Pi is also supported, but not via built-in MCP support (Pi has none): the community `pi-mcp-adapter` + `pi-agent-plugins` packages load the Agent Plugins 1.0 `plugin.json` / root `mcp.json` this repository already ships, so the same portable package is the Pi integration path.
 
 ## Review resolutions
 
@@ -356,14 +356,16 @@ pub struct WorldStatsResult {
 
 Algorithm:
 
-1. `entities` comes from `World::entity_count()`;
-2. `archetypes` comes from `World::archetypes().len()`;
-3. iterate populated archetypes;
-4. add each archetype's entity count to every component ID present in that archetype;
-5. resolve names through `World::components()` metadata;
-6. sort by entity count descending, then component name ascending;
-7. truncate to `limit`;
-8. set `returned` and `truncated` explicitly.
+1. resolve the `ComponentId` for `IsResource` (the marker Bevy 0.19 attaches to resource-backed entities);
+2. iterate only populated archetypes (`!archetype.is_empty()`);
+3. skip any archetype whose component set contains `IsResource`, so resource entities/archetypes are excluded from both totals (in Bevy 0.19 resources are entity-backed, so raw `World::entity_count()` / `World::archetypes().len()` would otherwise include them);
+4. `entities` is the sum of `archetype.len()` over the remaining archetypes;
+5. `archetypes` is the count of remaining archetypes;
+6. add each remaining archetype's entity count to every non-resource component ID present in that archetype;
+7. resolve names through `World::components()` metadata;
+8. sort by entity count descending, then component name ascending;
+9. truncate to `limit`;
+10. set `returned` and `truncated` explicitly.
 
 No history, timings, profiler data, or resource dump is added.
 
