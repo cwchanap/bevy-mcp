@@ -113,9 +113,6 @@ jobs:
 
       - name: Real MCP client integration
         run: xvfb-run -a npm run test:integration
-        env:
-          WGPU_BACKEND: gl
-          LIBGL_ALWAYS_SOFTWARE: '1'
 
       - name: Dump fixture logs on failure
         if: failure()
