@@ -13,9 +13,9 @@ This repo owns exactly two things:
 
 1. **`crates/bevy-mcp-bridge`** — a Bevy plugin (`BevyMcpPlugin`) that registers two extra BRP
    methods into the host app's own BRP endpoint.
-2. **The npm package `@cwchanap/bevy-plugin`** — a ~30-line stdio passthrough (`src/launcher.mjs` +
-   `bin/bevy-plugin.mjs`) that spawns the upstream binary, plus the Codex/Claude/Agent-Plugins
-   manifests that point every client at that one binary.
+2. **The npm package `@cwchanap/bevy-plugin`** — a thin TypeScript stdio passthrough
+   (`src/launcher.ts` + `src/index.ts`, compiled to `build/`) that spawns the upstream binary, plus
+   the Codex/Claude/Agent-Plugins manifests that point every client at that one binary.
 
 When adding functionality, first check whether upstream already provides it. Do not reimplement a
 BRP client, Cargo discovery, process manager, ECS tool layer, screenshot handling, or a local error
@@ -30,10 +30,12 @@ cargo test --workspace                       # bridge unit tests + fixture build
 cargo clippy --workspace --all-targets -- -D warnings
 cargo test -p bevy-mcp-bridge <test_name>    # single Rust test
 
-npm ci && npm test                           # launcher unit tests (node --test)
-node --test test/launcher.test.mjs           # single launcher test file
+npm ci
+npm run typecheck                            # strict TypeScript check
+npm run build                                # compile src/ -> build/
+npm test                                     # compile + run launcher tests
 npm run smoke:packed                         # npm pack -> install -> run bin against a fake upstream
-npm run test:integration                     # full journey; needs a display
+npm run test:integration                     # build + full journey; needs a display
 ```
 
 `npm run test:integration` is the only test that exercises the real path end to end. It requires
@@ -43,12 +45,12 @@ npm run test:integration                     # full journey; needs a display
 ## Architecture
 
 ```
-agent client --stdio--> bin/bevy-plugin.mjs --spawn--> bevy_brp_mcp (upstream)
-                                                            |
-                                                        BRP :15702
-                                                            v
-                                             your Bevy app + BevyMcpPlugin
-                                                (BrpExtrasPlugin + 2 methods)
+agent client --stdio--> build/index.js --spawn--> bevy_brp_mcp (upstream)
+                                                   |
+                                               BRP :15702
+                                                   v
+                                    your Bevy app + BevyMcpPlugin
+                                       (BrpExtrasPlugin + 2 methods)
 ```
 
 `BevyMcpPlugin` (`crates/bevy-mcp-bridge/src/lib.rs`) adds `BrpExtrasPlugin`, registers the two
@@ -75,7 +77,7 @@ Behavioral invariants the tests pin down:
 ## Version pins (change these together)
 
 - **`bevy_brp_mcp` / `bevy_brp_extras` 0.22.3** appears in `crates/bevy-mcp-bridge/Cargo.toml`,
-  `PREREQUISITE_COMMAND` in `src/launcher.mjs`, the assertion in `test/launcher.test.mjs`, the CI
+  `PREREQUISITE_COMMAND` in `src/launcher.ts`, the assertion in `test/launcher.test.ts`, the CI
   `cargo install` step, and the README. The upstream and extras versions must match.
 - **Bevy 0.19.1** — the bridge depends on focused subcrates (`bevy_app`, `bevy_ecs`, `bevy_remote`,
   `bevy_time`), never the umbrella `bevy` crate. The fixture uses the umbrella crate with `png`.
