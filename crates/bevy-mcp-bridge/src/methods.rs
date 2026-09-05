@@ -121,7 +121,10 @@ pub fn apply_time_control(
 }
 
 pub fn world_stats(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
-    let params: WorldStatsParams = parse_params(params)?;
+    let params: WorldStatsParams = match params {
+        Some(value) => serde_json::from_value(value).map_err(invalid_params)?,
+        None => WorldStatsParams { limit: None },
+    };
     let limit = params.limit.unwrap_or(DEFAULT_STATS_LIMIT);
 
     let result = collect_world_stats(world, limit).map_err(invalid_params)?;
