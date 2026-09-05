@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "bevy": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "@cwchanap/bevy-plugin@0.1.0"]
+    }
+  }
+}
