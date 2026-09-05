@@ -117,6 +117,16 @@ jobs:
           WGPU_BACKEND: gl
           LIBGL_ALWAYS_SOFTWARE: '1'
 
+      - name: Dump fixture logs on failure
+        if: failure()
+        run: |
+          ls -la /tmp/bevy_brp_mcp_*.log 2>/dev/null || echo "no bevy_brp_mcp log files in /tmp"
+          for f in /tmp/bevy_brp_mcp_*.log; do
+            [ -e "$f" ] || continue
+            echo "===== $f ====="
+            tail -n 200 "$f"
+          done
+
   publish:
     name: Publish to npm
     runs-on: ubuntu-latest
