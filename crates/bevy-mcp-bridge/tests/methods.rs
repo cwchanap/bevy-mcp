@@ -1,4 +1,4 @@
-use bevy_ecs::{component::Component, world::World};
+use bevy_ecs::{component::Component, resource::Resource, world::World};
 use bevy_mcp_bridge::methods::{TimeControlParams, apply_time_control, collect_world_stats};
 use bevy_time::{Time, Virtual};
 
@@ -11,6 +11,9 @@ struct Beta;
 #[derive(Component)]
 struct Gamma;
 
+#[derive(Resource)]
+struct SampleResource;
+
 #[test]
 fn world_stats_bounded_counts_and_truncation() {
     let mut world = World::new();
@@ -19,6 +22,8 @@ fn world_stats_bounded_counts_and_truncation() {
 
     let result = collect_world_stats(&world, 1).unwrap();
     assert_eq!(result.entities, 2);
+    // (Alpha) and (Alpha, Beta); the empty root archetype is excluded.
+    assert_eq!(result.archetypes, 2);
     assert_eq!(result.components.len(), 1);
     assert_eq!(result.components[0].entities, 2);
     assert_eq!(result.returned, 1);
@@ -49,6 +54,21 @@ fn world_stats_orders_count_desc_then_name_asc() {
     assert_eq!(result.components[2].entities, 2);
     assert_eq!(result.returned, 3);
     assert!(!result.truncated);
+}
+
+#[test]
+fn world_stats_archetypes_counts_entity_archetypes_only() {
+    let mut world = World::new();
+    world.spawn((Alpha,));
+    world.spawn((Alpha, Beta));
+    world.insert_resource(SampleResource);
+
+    let result = collect_world_stats(&world, 500).unwrap();
+    // Entity domain only: (Alpha) and (Alpha, Beta). The unfiltered
+    // World::archetypes().len() would additionally count the resource
+    // archetype and the empty root archetype (4).
+    assert_eq!(result.archetypes, 2);
+    assert_eq!(result.entities, 2);
 }
 
 #[test]

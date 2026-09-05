@@ -46,12 +46,14 @@ pub fn collect_world_stats(world: &World, limit: usize) -> Result<WorldStatsResu
     let is_resource_id: Option<ComponentId> = world.components().component_id::<IsResource>();
     let mut totals: HashMap<ComponentId, usize> = HashMap::new();
     let mut entities = 0u32;
+    let mut archetypes = 0usize;
     for archetype in world.archetypes().iter().filter(|a| !a.is_empty()) {
         let comps = archetype.components();
         if is_resource_id.is_some_and(|id| comps.contains(&id)) {
             continue;
         }
         entities += archetype.len();
+        archetypes += 1;
         for id in comps {
             *totals.entry(*id).or_default() += archetype.len() as usize;
         }
@@ -75,7 +77,7 @@ pub fn collect_world_stats(world: &World, limit: usize) -> Result<WorldStatsResu
 
     Ok(WorldStatsResult {
         entities,
-        archetypes: world.archetypes().len(),
+        archetypes,
         returned: components.len(),
         truncated,
         components,
