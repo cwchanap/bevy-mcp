@@ -109,6 +109,20 @@ async function main() {
     }
   }
 
+  async function dumpFixtureLog() {
+    // ponytail: best-effort only — if upstream renames read_log, print nothing
+    try {
+      const res = await client.callTool(
+        { name: 'read_log', arguments: { app_name: FIXTURE, port: PORT } },
+        { timeout: 15_000 },
+      );
+      const text = (res.content ?? []).map((c) => c.text ?? '').join('\n');
+      if (text.trim()) console.error(`[integration] fixture log:\n${text}`);
+    } catch {
+      // best-effort diagnostic only
+    }
+  }
+
   let failed = false;
   let serverPid;
   try {
@@ -227,6 +241,7 @@ async function main() {
   } catch (err) {
     failed = true;
     console.error(`[integration] FAIL: ${err.message}`);
+    if (fixtureUp) await dumpFixtureLog();
     // Best-effort cleanup so a failed run leaves no orphan or port squatter.
     try {
       await shutdownFixture();
