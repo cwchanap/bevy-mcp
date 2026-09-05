@@ -1,0 +1,6 @@
+[workspace]
+members = [
+  "crates/bevy-mcp-bridge",
+  "fixtures/full-app",
+]
+resolver = "3"
