@@ -79,16 +79,23 @@ claude plugin install bevy-plugin@cwchanap
 
 **Pi (via community MCP adapter)**
 
-Pi has no built-in MCP support. Install the community adapter and Agent Plugins loader, then point Pi at this repository's portable package (`plugin.json` + root `mcp.json`):
+Pi has no built-in MCP support. Install the community adapter and Agent Plugins loader, then install and trust this repository's portable package (`plugin.json` + root `mcp.json`):
 
 ```bash
 pi install npm:pi-mcp-adapter
 pi install npm:pi-agent-plugins
 ```
 
+The two commands above only provision the MCP runtime and the Agent Plugins loader; they do not load this plugin. Inside Pi, install this repository's portable package and trust it so its root `mcp.json` is projected to `pi-mcp-adapter`:
+
+```text
+/plugin install github.com/cwchanap/bevy-mcp
+/plugin trust bevy-plugin
+```
+
 The portable `plugin.json` / `mcp.json` this repo ships are the Agent Plugins 1.0 package; other Agent-Plugins-compatible clients load them through their own install flow.
 
-All of them resolve to `@cwchanap/bevy-plugin`, which launches the upstream `bevy_brp_mcp` server.
+Once the plugin is installed and trusted, all of the above entrypoints resolve to `@cwchanap/bevy-plugin`, which launches the upstream `bevy_brp_mcp` server.
 
 ## Development
 
