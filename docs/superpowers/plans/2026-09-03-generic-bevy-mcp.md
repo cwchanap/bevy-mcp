@@ -308,7 +308,7 @@ Each handler follows the same upstream signature style:
 fn world_stats(In(params): In<Option<Value>>, world: &mut World) -> BrpResult
 ```
 
-and maps missing/malformed/invalid params to `BrpError { code: INVALID_PARAMS, ... }`; serialization failure uses `BrpError::internal`.
+and treats omitted params as an empty `WorldStatsParams` (so `DEFAULT_STATS_LIMIT` applies); malformed or invalid supplied params map to `BrpError { code: INVALID_PARAMS, ... }`; serialization failure uses `BrpError::internal`. `time_control` keeps its parameters required.
 
 `BevyMcpPlugin::build` adds `BrpExtrasPlugin` before registering/publishing these methods.
 
