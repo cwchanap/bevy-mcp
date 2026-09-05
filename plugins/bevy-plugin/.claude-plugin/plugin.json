@@ -1,0 +1,15 @@
+{
+  "name": "bevy-plugin",
+  "displayName": "Bevy Plugin",
+  "version": "0.1.0",
+  "description": "Connect Claude Code to local Bevy projects through the Bevy BRP MCP server.",
+  "author": {
+    "name": "cwchanap",
+    "url": "https://github.com/cwchanap"
+  },
+  "homepage": "https://github.com/cwchanap/bevy-mcp",
+  "repository": "https://github.com/cwchanap/bevy-mcp",
+  "license": "MIT",
+  "keywords": ["bevy", "mcp", "claude-code", "game-development"],
+  "mcpServers": "./.mcp.json"
+}

@@ -1,0 +1,14 @@
+{
+  "name": "cwchanap",
+  "owner": {
+    "name": "cwchanap",
+    "url": "https://github.com/cwchanap"
+  },
+  "plugins": [
+    {
+      "name": "bevy-plugin",
+      "source": "./plugins/bevy-plugin",
+      "description": "Inspect, run, author, and control local Bevy projects through MCP."
+    }
+  ]
+}
