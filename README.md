@@ -66,7 +66,8 @@ The same npm package powers all three plugin ecosystems (modeled after the Godot
 **Codex**
 
 ```bash
-npx skills add cwchanap/bevy-mcp
+codex plugin marketplace add cwchanap/bevy-mcp
+codex plugin add bevy-plugin@cwchanap
 ```
 
 **Claude Code / Claude plugins**
