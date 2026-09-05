@@ -5,11 +5,10 @@
   "type": "module",
   "license": "MIT",
   "bin": {
-    "bevy-plugin": "bin/bevy-plugin.mjs"
+    "bevy-plugin": "build/index.js"
   },
   "files": [
-    "bin",
-    "src",
+    "build",
     "plugin.json",
     "mcp.json"
   ],
@@ -17,11 +16,17 @@
     "node": ">=20"
   },
   "scripts": {
-    "test": "node --test test/*.test.mjs",
-    "test:integration": "node scripts/integration.mjs",
-    "smoke:packed": "node scripts/smoke-packed-cli.mjs"
+    "build": "npm run typecheck && tsc -p tsconfig.build.json",
+    "test": "tsc -p tsconfig.test.json && node --test .test-build/test/*.test.js",
+    "test:integration": "npm run build && node scripts/integration.mjs",
+    "smoke:packed": "node scripts/smoke-packed-cli.mjs",
+    "prepare": "npm run build",
+    "typecheck": "tsc --noEmit",
+    "prepack": "npm run build"
   },
   "devDependencies": {
-    "@modelcontextprotocol/client": "^2.0.0"
+    "@modelcontextprotocol/client": "^2.0.0",
+    "@types/node": "^20.11.24",
+    "typescript": "^5.3.3"
   }
 }
