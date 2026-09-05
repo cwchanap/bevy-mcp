@@ -5,7 +5,7 @@
 //
 // Requires `bevy_brp_mcp` on PATH (or BEVY_BRP_MCP_BIN) and the fixture
 // debug build (`cargo build -p bevy-mcp-fixture`). Runs the upstream binary
-// through bin/bevy-plugin.mjs — the exact wrapper we ship.
+// through build/index.js — the exact wrapper we ship.
 
 import assert from 'node:assert/strict';
 import { existsSync, statSync } from 'node:fs';
@@ -74,7 +74,7 @@ async function main() {
   const client = new Client({ name: 'bevy-plugin-integration', version: '1.0.0' });
   const transport = new StdioClientTransport({
     command: process.execPath,
-    args: ['bin/bevy-plugin.mjs'],
+    args: ['build/index.js'],
     cwd: repoRoot,
     stderr: 'inherit',
     // The SDK's default env whitelist drops DISPLAY — without the full env the
@@ -136,7 +136,7 @@ async function main() {
   let serverPid;
   try {
     // --- Journey step 1: real MCP initialize handshake -----------------------
-    log('connecting MCP client to bin/bevy-plugin.mjs');
+    log('connecting MCP client to build/index.js');
     await client.connect(transport);
     serverPid = transport.pid;
     log(`initialized (server pid ${serverPid})`);
