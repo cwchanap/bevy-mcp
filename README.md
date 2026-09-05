@@ -3,7 +3,7 @@
 Generic Model Context Protocol tooling for inspecting, controlling, and debugging Bevy applications. This repository provides two pieces:
 
 - **`bevy_brp_mcp`** — the upstream general-purpose MCP server (installed via Cargo, not part of this repo). It ships the standard toolset: launch, logs, entity query, mutation, watch, type guide, screenshot, input, and diagnostics.
-- **`bevy-mcp-bridge`** — a small Bevy plugin (this repo) that registers two extra generic agent tools, `world_stats` and `time_control`, into your app's BRP endpoint. The npm package `@cwchanap/bevy-plugin` is a thin launcher that delegates stdio to the upstream binary.
+- **`bevy-mcp-bridge`** — a small Bevy plugin (this repo) that registers two extra generic agent tools, `world_stats` and `time_control`, into your app's BRP endpoint. The npm package `@cwchanap/bevy-plugin` is a thin TypeScript launcher compiled to JavaScript that delegates stdio to the upstream binary.
 
 ## Prerequisites
 
@@ -102,9 +102,12 @@ Once the plugin is installed and trusted, all of the above entrypoints resolve t
 ```bash
 cargo fmt --all -- --check   # format check
 cargo test --workspace       # Rust tests (bridge + full-app fixture)
-npm ci && npm test           # launcher unit tests
+npm ci                       # install Node/TypeScript dependencies
+npm run typecheck            # strict TypeScript check
+npm run build                # compile src/ to build/
+npm test                     # compile + run launcher unit tests
 npm run smoke:packed         # smoke-test the packed npm CLI
-npm run test:integration     # real MCP client -> launcher -> upstream -> Bevy fixture
+npm run test:integration     # build + real MCP client -> launcher -> upstream -> Bevy fixture
 ```
 
 The integration test needs a display; on Linux use `xvfb-run -a npm run test:integration`.
