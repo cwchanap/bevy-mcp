@@ -110,16 +110,27 @@ async function main() {
   }
 
   async function dumpFixtureLog() {
-    // ponytail: best-effort only — if upstream renames read_log, print nothing
+    // ponytail: best-effort only — log reading must never mask the real failure
     try {
+      const listed = await client.callTool(
+        { name: 'list_logs', arguments: { app_name: FIXTURE, verbose: false } },
+        { timeout: 15_000 },
+      );
+      assert.ok(!listed.isError, `list_logs failed: ${JSON.stringify(listed.content)}`);
+      const logs = listed.structuredContent?.result?.logs ?? [];
+      if (!logs.length) {
+        console.error('[integration] fixture log: (no log files recorded)');
+        return;
+      }
+      const newest = logs[logs.length - 1];
       const res = await client.callTool(
-        { name: 'read_log', arguments: { app_name: FIXTURE, port: PORT } },
+        { name: 'read_log', arguments: { filename: newest.filename, tail_lines: 80 } },
         { timeout: 15_000 },
       );
       const text = (res.content ?? []).map((c) => c.text ?? '').join('\n');
-      if (text.trim()) console.error(`[integration] fixture log:\n${text}`);
-    } catch {
-      // best-effort diagnostic only
+      if (text.trim()) console.error(`[integration] fixture log (${newest.filename}):\n${text}`);
+    } catch (err) {
+      console.error(`[integration] fixture log dump failed: ${err.message}`);
     }
   }
 
