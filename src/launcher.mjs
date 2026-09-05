@@ -14,7 +14,7 @@ export const PREREQUISITE_COMMAND = 'cargo install bevy_brp_mcp --version 0.22.3
  */
 export function launchUpstream({ argv = [], env = process.env, spawnImpl = spawn } = {}) {
   const command = env.BEVY_BRP_MCP_BIN || 'bevy_brp_mcp';
-  const child = spawnImpl(command, argv, { stdio: 'inherit' });
+  const child = spawnImpl(command, argv, { stdio: 'inherit', env });
   const done = new Promise((resolve) => {
     child.on('error', (err) => {
       if (err.code === 'ENOENT') {
