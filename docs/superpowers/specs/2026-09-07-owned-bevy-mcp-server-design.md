@@ -29,7 +29,7 @@ The existing Rust `bevy-mcp-bridge` remains the application-side integration lay
 - MCP TypeScript SDK: `@modelcontextprotocol/server` 2.x
 - MCP client used by integration tests: `@modelcontextprotocol/client` 2.x
 - Schema library: Zod 4
-- TypeScript: project compiler upgraded only as required by MCP SDK 2.x / Zod 4
+- TypeScript: 7.0.x
 - Bevy: 0.19.x
 - `bevy_brp_extras`: 0.22.3
 - Rust: >=1.95, edition 2024
@@ -151,7 +151,7 @@ The owned server exposes 49 tools. The two trace/debug tools are always availabl
 | `world_get_components_watch` | local watch manager + `world.get_components` polling |
 | `world_list_components_watch` | local watch manager + `world.list_components` polling |
 | `brp_execute` | discover-validated raw BRP call |
-| `brp_list_agent_tools` | app-published agent-tool catalog |
+| `brp_list_agent_tools` | direct `brp_extras/agent_tools` catalog read + normalization |
 
 ### BRP extras tools
 
@@ -176,7 +176,7 @@ The owned server exposes 49 tools. The two trace/debug tools are always availabl
 
 | MCP tool | Implementation |
 | --- | --- |
-| `brp_stop_watch` | stop one local watch by ID |
+| `brp_stop_watch` | stop one local watch by numeric ID |
 | `brp_list_active_watches` | return local watch registry |
 
 ### Application tools
@@ -276,7 +276,7 @@ Trace levels are `off`, `error`, `warn`, `info`, `debug`, and `trace`. `brp_set_
 
 ```ts
 interface ActiveWatch {
-  id: string;
+  id: number;
   kind: 'get_components' | 'list_components';
   entity: number;
   types?: string[];
@@ -286,9 +286,9 @@ interface ActiveWatch {
 }
 ```
 
-A watch starts only after an initial BRP request succeeds. `world_get_components_watch` requires at least one component type. The manager takes an initial snapshot, polls the appropriate ordinary BRP read, writes only changed snapshots, and uses stable deep JSON equality after canonical key ordering.
+Watch IDs start at 1 and increase monotonically for the life of the MCP server, matching the pinned upstream public contract. A watch starts only after an initial BRP request succeeds. `world_get_components_watch` requires at least one component type. The manager takes an initial snapshot, polls the appropriate ordinary BRP read, writes only changed snapshots, and uses stable deep JSON equality after canonical key ordering.
 
-Default poll interval: 250 ms. Watch IDs are UUIDs. `brp_stop_watch` aborts the polling task and closes its log stream. Server shutdown aborts every active watch.
+Default poll interval: 250 ms. `brp_stop_watch` returns a tool error when the requested watch ID is not active. `brp_stop_watch` aborts the polling task and closes its log stream. Server shutdown aborts every active watch.
 
 The watch tools are implemented locally rather than depending on `+watch` transport behavior. This keeps the implementation small and testable while preserving the user-facing watch capability.
 
@@ -296,7 +296,7 @@ The watch tools are implemented locally rather than depending on `+watch` transp
 
 ### `world_find_entities_by_name`
 
-Query reflected `bevy_core::name::Name` values, then apply the requested exact/contains/prefix matching locally. Return canonical entity IDs and names in deterministic entity-ID order. This tool is a convenience composite, not a raw `world.query` alias.
+Query reflected `bevy_core::name::Name` values, then apply the requested case-sensitive `exact`, `prefix`, `suffix`, or `contains` matching locally. Asterisks are ordinary literal characters. Return canonical entity IDs and names in deterministic entity-ID order. This tool is a convenience composite, not a raw `world.query` alias.
 
 ### `brp_extras_screenshot`
 
@@ -304,7 +304,7 @@ Parameters support full-screen/camera capture plus mutually exclusive `entity` o
 
 ### `brp_list_agent_tools`
 
-Read the application agent-tool catalog supplied by `BrpExtrasPlugin`, preserve its typed parameter/result schemas, and return it as an MCP-friendly structured result.
+Call `brp_extras/agent_tools`, preserve its typed parameter/result schemas, and return its curated agent-tool document as an MCP-friendly structured result.
 
 ### `brp_execute`
 
@@ -331,7 +331,7 @@ For one registered type the guide should include:
 Use one small helper for successful tool results:
 
 ```ts
-function toolResult(message: string, structuredContent?: unknown) {
+function toolResult(message: string, structuredContent?: Record<string, unknown>) {
   return {
     content: [{ type: 'text' as const, text: message }],
     structuredContent,
