@@ -10,6 +10,24 @@
 
 **Spec:** `docs/superpowers/specs/2026-09-07-owned-bevy-mcp-server-design.md`
 
+## Review resolution summary
+
+Accepted and incorporated:
+
+- rewrite contradictory `CLAUDE.md`/`AGENTS.md` guidance;
+- use reflected `bevy_ecs::name::Name` and exercise it against the live fixture in the same task;
+- standardize all structured results as `{ message, result, metadata? }`;
+- target 47 default tools and drop the two non-default `mcp-debug` trace tools/TraceLogger;
+- keep children referenced and clean them up on server close;
+- make `LogStore` the only app/watch path allocator;
+- keep TypeScript 5.x;
+- split Cargo from process/log work while keeping one PR;
+- remove stale CI `/tmp/bevy_brp_mcp_*.log` handling and scan README/CLAUDE/AGENTS for active upstream dependencies;
+- commit local JSON-schema snapshots so the pinned upstream commit is migration input rather than a living runtime contract;
+- add explicit risks for schema drift, reflected Name drift, orphaned processes, and the large all-type-guide response.
+
+Intentionally not incorporated: dropping `brp_all_type_guides` or adding a new `limit`/`truncated` contract. It is part of the default upstream surface, and the user explicitly requested a complete rebuild. Upstream's default `AllTypeGuidesParams` is port-only, so changing it would be a product/API change rather than parity work.
+
 ## Global Constraints
 
 - This is one PR. Continue on branch `agent/owned-bevy-mcp-server-plan`; tasks below are review/commit boundaries, not separate PRs.
