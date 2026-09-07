@@ -1,19 +1,31 @@
 # Bevy MCP
 
-Generic Model Context Protocol tooling for inspecting, controlling, and debugging Bevy applications. This repository provides two pieces:
+Generic Model Context Protocol tooling for inspecting, controlling, and debugging Bevy applications.
 
-- **`bevy_brp_mcp`** — the upstream general-purpose MCP server (installed via Cargo, not part of this repo). It ships the standard toolset: launch, logs, entity query, mutation, watch, type guide, screenshot, input, and diagnostics.
-- **`bevy-mcp-bridge`** — a small Bevy plugin (this repo) that registers two extra generic agent tools, `world_stats` and `time_control`, into your app's BRP endpoint. The npm package `@cwchanap/bevy-plugin` is a thin TypeScript launcher compiled to JavaScript that delegates stdio to the upstream binary.
+> **Active migration:** Draft PR #3 is replacing the current external `bevy_brp_mcp` launcher dependency with a repository-owned TypeScript MCP server. Until that implementation lands, the runtime below still describes the current `main` behavior. The approved replacement design is in `docs/superpowers/specs/2026-09-07-owned-bevy-mcp-server-design.md` and its implementation plan is in `docs/superpowers/plans/2026-09-07-owned-bevy-mcp-server.md`.
 
-## Prerequisites
+The migration target is a self-contained npm MCP server owning the full 47-tool default catalog, while keeping `bevy-mcp-bridge`/`bevy_brp_extras` as the application-side BRP integration. No new work should deepen the external MCP executable dependency.
 
-Install the upstream MCP server (pinned; no standalone `bevy_ecs` support in v1 — a full Bevy `App` is required):
+## Current main-branch runtime
+
+Today this repository still provides two pieces while the migration is in progress:
+
+- **`bevy_brp_mcp`** — the upstream general-purpose MCP server (installed via Cargo, not part of this repo). It currently ships the standard toolset: launch, logs, entity query, mutation, watch, type guide, screenshot, input, and diagnostics.
+- **`bevy-mcp-bridge`** — a small Bevy plugin (this repo) that registers two extra generic agent tools, `world_stats` and `time_control`, into your app's BRP endpoint. The npm package `@cwchanap/bevy-plugin` is currently a thin TypeScript launcher compiled to JavaScript that delegates stdio to the upstream binary.
+
+The September 7 migration removes the first dependency and turns the npm package into the MCP server itself. This README will be rewritten to the final owned-server instructions in the implementation PR before merge.
+
+## Current prerequisites
+
+Until the migration implementation lands, current `main` still requires:
 
 ```bash
 cargo install bevy_brp_mcp --version 0.22.3 --locked
 ```
 
-## Quick Start
+This prerequisite is explicitly scheduled for deletion by the September 7 plan and must not be copied into new integration paths.
+
+## Current quick start
 
 1. Add the bridge plugin to your Bevy project:
 
@@ -27,7 +39,7 @@ cargo install bevy_brp_mcp --version 0.22.3 --locked
    .add_plugins(bevy_mcp_bridge::BevyMcpPlugin)
    ```
 
-3. Connect your agent through the npm launcher (see install options below) or run `bevy_brp_mcp` directly.
+3. Connect your agent through the npm launcher while the migration is still in progress.
 
 ## Requirements
 
@@ -37,31 +49,20 @@ cargo install bevy_brp_mcp --version 0.22.3 --locked
   bevy = { version = "0.19", features = ["png"] }
   ```
 
-- **Generic ECS inspection** (querying/mutating your own components and resources) requires reflection: derive `Reflect` and call `app.register_type::<T>()` for every type you want visible over BRP.
-- The upstream server already provides launch, logs, query, mutation, watch, type-guide, screenshot, input, and diagnostics tools — the bridge does not reimplement any of them.
+- **Generic ECS inspection** requires reflection: derive `Reflect` and call `app.register_type::<T>()` for every type you want visible over BRP.
 
-## Custom tools (`world_stats` / `time_control`)
+## Custom application methods
 
-The bridge registers exactly two generic methods:
+The bridge registers two generic methods:
 
-- `bevy_mcp_world_stats` — bounded, deterministic aggregate ECS world statistics;
-- `bevy_mcp_time_control` — pause, resume, or set the relative speed of `Time<Virtual>` (scale is validated before mutation).
+- `bevy_mcp/world_stats` — bounded, deterministic aggregate ECS world statistics;
+- `bevy_mcp/time_control` — pause, resume, or set the relative speed of `Time<Virtual>`.
 
-They are not exposed as separate MCP tools. Discover them with `brp_list_agent_tools` and invoke them with `brp_execute`, passing `bevy_mcp/world_stats` / `bevy_mcp/time_control` as the method.
+They are not separate top-level MCP tools. Discover them with `brp_list_agent_tools` and invoke them with `brp_execute` using `bevy_mcp/world_stats` or `bevy_mcp/time_control`.
 
-## Launcher configuration
+## Agent installation metadata
 
-The npm launcher simply executes the upstream binary with inherited stdio. To point it at a different build or location, set:
-
-```bash
-export BEVY_BRP_MCP_BIN=/path/to/bevy_brp_mcp
-```
-
-If the upstream binary is missing, the launcher fails fast with the install command.
-
-## Agent installation
-
-The same npm package powers every supported client (modeled after the Godot plugin marketplace flow):
+The repository ships one portable npm/Agent-Plugins entrypoint for Codex, Claude Code, Pi adapters, and other compatible clients. The metadata shape remains unchanged during the migration; only the npm executable changes from a launcher into the actual MCP server.
 
 **Codex**
 
@@ -79,38 +80,27 @@ claude plugin install bevy-plugin@cwchanap
 
 **Pi (via community MCP adapter)**
 
-Pi has no built-in MCP support. Install the community adapter and Agent Plugins loader, then install and trust this repository's portable package (`plugin.json` + root `mcp.json`):
-
 ```bash
 pi install npm:pi-mcp-adapter
 pi install npm:pi-agent-plugins
 ```
 
-The two commands above only provision the MCP runtime and the Agent Plugins loader; they do not load this plugin. Inside Pi, install this repository's portable package and trust it so its root `mcp.json` is projected to `pi-mcp-adapter`:
-
-```text
-/plugin install github.com/cwchanap/bevy-mcp
-/plugin trust bevy-plugin
-```
-
-The portable `plugin.json` / `mcp.json` this repo ships are the Agent Plugins 1.0 package; other Agent-Plugins-compatible clients load them through their own install flow.
-
-Once the plugin is installed and trusted, all of the above entrypoints resolve to `@cwchanap/bevy-plugin`, which launches the upstream `bevy_brp_mcp` server.
+Then install/trust this repository's portable package through Pi's Agent Plugins flow.
 
 ## Development
 
 ```bash
-cargo fmt --all -- --check   # format check
-cargo test --workspace       # Rust tests (bridge + full-app fixture)
-npm ci                       # install Node/TypeScript dependencies
-npm run typecheck            # strict TypeScript check
-npm run build                # compile src/ to build/
-npm test                     # compile + run launcher unit tests
-npm run smoke:packed         # smoke-test the packed npm CLI
-npm run test:integration     # build + real MCP client -> launcher -> upstream -> Bevy fixture
+cargo fmt --all -- --check
+cargo test --workspace
+npm ci
+npm run typecheck
+npm run build
+npm test
+npm run smoke:packed
+npm run test:integration
 ```
 
-The integration test needs a display; on Linux use `xvfb-run -a npm run test:integration`.
+During the owned-server migration, follow the September 7 implementation plan for the additional no-upstream and live-name smoke gates.
 
 ## License
 
