@@ -2,22 +2,22 @@
 
 Generic Model Context Protocol tooling for inspecting, controlling, and debugging Bevy applications.
 
-> **Active migration:** Draft PR #3 is replacing the current external `bevy_brp_mcp` launcher dependency with a repository-owned TypeScript MCP server. Until that implementation lands, the runtime below still describes the current `main` behavior. The approved replacement design is in `docs/superpowers/specs/2026-09-07-owned-bevy-mcp-server-design.md` and its implementation plan is in `docs/superpowers/plans/2026-09-07-owned-bevy-mcp-server.md`.
+> **Active migration:** Draft PR #3 is replacing the current external `bevy_brp_mcp` launcher dependency with a repository-owned TypeScript MCP server. Until that implementation lands, the runtime below still describes the current behavior. The approved replacement design is in `docs/superpowers/specs/2026-09-07-owned-bevy-mcp-server-design.md` and its implementation plan is in `docs/superpowers/plans/2026-09-07-owned-bevy-mcp-server.md`.
 
 The migration target is a self-contained npm MCP server owning the full 47-tool default catalog, while keeping `bevy-mcp-bridge`/`bevy_brp_extras` as the application-side BRP integration. No new work should deepen the external MCP executable dependency.
 
-## Current main-branch runtime
+## Current runtime
 
 Today this repository still provides two pieces while the migration is in progress:
 
 - **`bevy_brp_mcp`** — the upstream general-purpose MCP server (installed via Cargo, not part of this repo). It currently ships the standard toolset: launch, logs, entity query, mutation, watch, type guide, screenshot, input, and diagnostics.
 - **`bevy-mcp-bridge`** — a small Bevy plugin (this repo) that registers two extra generic agent tools, `world_stats` and `time_control`, into your app's BRP endpoint. The npm package `@cwchanap/bevy-plugin` is currently a thin TypeScript launcher compiled to JavaScript that delegates stdio to the upstream binary.
 
-The September 7 migration removes the first dependency and turns the npm package into the MCP server itself. This README will be rewritten to the final owned-server instructions in the implementation PR before merge.
+The September 7 migration removes the first dependency and turns the npm package into the MCP server itself. This README will be rewritten to the final owned-server instructions before the implementation PR is merged.
 
 ## Current prerequisites
 
-Until the migration implementation lands, current `main` still requires:
+Until the migration implementation lands, the current runtime still requires:
 
 ```bash
 cargo install bevy_brp_mcp --version 0.22.3 --locked
