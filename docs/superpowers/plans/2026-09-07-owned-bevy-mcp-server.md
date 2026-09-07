@@ -6,7 +6,7 @@
 
 **Architecture:** `@cwchanap/bevy-plugin` becomes the actual MCP stdio server using `@modelcontextprotocol/server` 2.x and Zod 4. One small BRP JSON-RPC client talks directly to each Bevy application's localhost BRP endpoint, while focused Node-native runtime modules own Cargo discovery/build/launch, process tracking, logs/tracing, watches, type-guide generation, and composite tools. The existing Rust `bevy-mcp-bridge` remains the application-side provider of `BrpExtrasPlugin`, `bevy_mcp/world_stats`, and `bevy_mcp/time_control`.
 
-**Tech Stack:** Node.js >=20, TypeScript, `@modelcontextprotocol/server` 2.x, `@modelcontextprotocol/client` 2.x for integration tests, Zod 4, native `fetch`, Node `child_process`/`fs`/`crypto`, Rust >=1.95, Bevy 0.19.x, `bevy_brp_extras` 0.22.3, GitHub Actions/Xvfb.
+**Tech Stack:** Node.js >=20, TypeScript 7.0.x, `@modelcontextprotocol/server` 2.x, `@modelcontextprotocol/client` 2.x for integration tests, Zod 4, native `fetch`, Node `child_process`/`fs`, Rust >=1.95, Bevy 0.19.x, `bevy_brp_extras` 0.22.3, GitHub Actions/Xvfb.
 
 **Spec:** `docs/superpowers/specs/2026-09-07-owned-bevy-mcp-server-design.md`
 
@@ -110,7 +110,7 @@ Keep plugin metadata (`mcp.json`, `plugin.json`, `plugins/bevy-plugin/**`, marke
 
 ## Parity contract
 
-The following public catalog must be represented exactly in `test/catalog.test.ts`. This is the PR's non-negotiable tool-list gate.
+The following public catalog is the PR's non-negotiable tool-list gate.
 
 ```ts
 export const EXPECTED_TOOL_NAMES = [
@@ -169,52 +169,53 @@ export const EXPECTED_TOOL_NAMES = [
 For parameter/schema parity, use the pinned upstream registry and matching parameter structs as the fixed source of truth. The implementation must transcribe those Rust structs into Zod rather than consuming the upstream crate/package. Important mappings:
 
 ```text
-world_list_components       -> ListComponentsParams
-world_get_components        -> GetComponentsParams
-world_despawn_entity        -> DespawnEntityParams
-world_insert_components     -> InsertComponentsParams
-world_remove_components     -> RemoveComponentsParams
-world_list_resources        -> ListResourcesParams
-world_get_resources         -> GetResourcesParams
-world_insert_resources      -> InsertResourcesParams
-world_remove_resources      -> RemoveResourcesParams
-world_mutate_resources      -> MutateResourcesParams
-world_mutate_components     -> MutateComponentsParams
-rpc_discover                -> RpcDiscoverParams
-world_query                 -> QueryParams
-world_find_entities_by_name -> FindEntitiesByNameParams
-world_spawn_entity          -> SpawnEntityParams
-world_trigger_event         -> TriggerEventParams
-registry_schema             -> RegistrySchemaParams
-world_reparent_entities     -> ReparentEntitiesParams
-world_get_components_watch  -> GetComponentsWatchParams
-world_list_components_watch -> ListComponentsWatchParams
-brp_execute                 -> ExecuteParams
-brp_list_agent_tools        -> ListAgentToolsParams
-brp_extras_screenshot       -> ScreenshotParams
-brp_extras_send_keys        -> SendKeysParams
-brp_extras_type_text        -> TypeTextParams
-brp_extras_set_window_title -> SetWindowTitleParams
-brp_extras_move_mouse       -> MoveMouseParams
+world_list_components        -> ListComponentsParams
+world_get_components         -> GetComponentsParams
+world_despawn_entity         -> DespawnEntityParams
+world_insert_components      -> InsertComponentsParams
+world_remove_components      -> RemoveComponentsParams
+world_list_resources         -> ListResourcesParams
+world_get_resources          -> GetResourcesParams
+world_insert_resources       -> InsertResourcesParams
+world_remove_resources       -> RemoveResourcesParams
+world_mutate_resources       -> MutateResourcesParams
+world_mutate_components      -> MutateComponentsParams
+rpc_discover                 -> RpcDiscoverParams
+world_query                  -> QueryParams
+world_find_entities_by_name  -> FindEntitiesByNameParams
+world_spawn_entity           -> SpawnEntityParams
+world_trigger_event          -> TriggerEventParams
+registry_schema              -> RegistrySchemaParams
+world_reparent_entities      -> ReparentEntitiesParams
+world_get_components_watch   -> GetComponentsWatchParams
+world_list_components_watch  -> ListComponentsWatchParams
+brp_execute                  -> ExecuteParams
+brp_list_agent_tools         -> ListAgentToolsParams
+brp_extras_screenshot        -> ScreenshotParams
+brp_extras_send_keys         -> SendKeysParams
+brp_extras_type_text         -> TypeTextParams
+brp_extras_set_window_title  -> SetWindowTitleParams
+brp_extras_move_mouse        -> MoveMouseParams
 brp_extras_send_mouse_button -> SendMouseButtonParams
-brp_extras_click_mouse      -> ClickMouseParams
+brp_extras_click_mouse       -> ClickMouseParams
 brp_extras_double_click_mouse -> DoubleClickMouseParams
-brp_extras_drag_mouse       -> DragMouseParams
-brp_extras_scroll_mouse     -> ScrollMouseParams
-brp_extras_pinch_gesture    -> PinchGestureParams
-brp_extras_rotation_gesture -> RotationGestureParams
+brp_extras_drag_mouse        -> DragMouseParams
+brp_extras_scroll_mouse      -> ScrollMouseParams
+brp_extras_pinch_gesture     -> PinchGestureParams
+brp_extras_rotation_gesture  -> RotationGestureParams
 brp_extras_double_tap_gesture -> DoubleTapGestureParams
-brp_extras_get_diagnostics  -> GetDiagnosticsParams
-brp_list_bevy               -> ListBevyParams
-brp_launch                  -> LaunchBevyBinaryParams
-brp_shutdown                -> ShutdownParams
-brp_status                  -> StatusParams
-brp_list_logs               -> ListLogsParams
-brp_read_log                -> ReadLogParams
-brp_delete_logs             -> DeleteLogsParams
-brp_set_tracing_level       -> SetTracingLevelParams
-brp_type_guide              -> TypeGuideParams
-brp_all_type_guides         -> AllTypeGuidesParams
+brp_extras_get_diagnostics   -> GetDiagnosticsParams
+brp_list_bevy                -> ListBevyParams
+brp_launch                   -> LaunchBevyBinaryParams
+brp_shutdown                 -> ShutdownParams
+brp_status                   -> StatusParams
+brp_list_logs                -> ListLogsParams
+brp_read_log                 -> ReadLogParams
+brp_delete_logs              -> DeleteLogsParams
+brp_stop_watch               -> StopWatchParams
+brp_set_tracing_level        -> SetTracingLevelParams
+brp_type_guide               -> TypeGuideParams
+brp_all_type_guides          -> AllTypeGuidesParams
 ```
 
 When upstream has no parameter struct (`brp_list_active_watches`, `brp_get_trace_log_path`, etc.), expose an empty Zod object rather than an untyped schema.
@@ -227,6 +228,7 @@ When upstream has no parameter struct (`brp_list_active_watches`, `brp_get_trace
 - Modify: `package.json`
 - Modify: `package-lock.json`
 - Modify: `src/index.ts`
+- Modify: `scripts/smoke-packed-cli.mjs`
 - Create: `src/server.ts`
 - Create: `src/services.ts`
 - Create: `src/tools/register.ts`
@@ -242,11 +244,9 @@ When upstream has no parameter struct (`brp_list_active_watches`, `brp_get_trace
 - Produces `registerTools(server: McpServer, services: BevyMcpServices): void`.
 - `src/index.ts` owns `StdioServerTransport` connection and signal cleanup only.
 
-- [ ] **Step 1: Replace launcher tests with a failing MCP initialize smoke test**
+- [ ] **Step 1: Replace launcher tests with a failing MCP server construction test**
 
-Create `test/server.test.ts` with a test that imports `createServer`, asserts it returns an MCP server instance, and verifies server creation does not spawn any external command. Use a fake `BevyMcpServices` object so the test has no Cargo/BRP dependency.
-
-Core shape:
+Create `test/server.test.ts` with a test that imports `createServer`, asserts it returns an MCP server instance, and verifies server construction uses only injected services. Use a fake `BevyMcpServices` object so the test has no Cargo/BRP dependency.
 
 ```ts
 const services: BevyMcpServices = {
@@ -270,9 +270,9 @@ npx tsc -p tsconfig.test.json && node --test .test-build/test/server.test.js
 
 Expected: FAIL because `server.ts` / `services.ts` do not exist.
 
-- [ ] **Step 2: Update dependencies**
+- [ ] **Step 2: Update dependencies to the owned server stack**
 
-Move MCP server functionality into runtime dependencies:
+`package.json` becomes:
 
 ```json
 "dependencies": {
@@ -282,11 +282,11 @@ Move MCP server functionality into runtime dependencies:
 "devDependencies": {
   "@modelcontextprotocol/client": "^2.0.0",
   "@types/node": "^20.11.24",
-  "typescript": "<version accepted by current SDK/build>"
+  "typescript": "^7.0.2"
 }
 ```
 
-Use `npm install` so `package-lock.json` records exact resolved versions. Keep Node >=20.
+Use `npm install` so `package-lock.json` records exact resolved versions. Keep Node >=20 and existing build/test scripts unless a TypeScript 7 compiler option needs a direct migration.
 
 - [ ] **Step 3: Implement the MCP bootstrap**
 
@@ -327,13 +327,39 @@ for (const signal of ['SIGINT', 'SIGTERM'] as const) {
 await server.connect(transport);
 ```
 
-`services.ts` may initially construct stub collaborators whose concrete implementations arrive in later tasks, but no stub may be exposed as a public MCP tool.
+At this task boundary `registerTools()` may register zero tools while later domain implementations are absent, but the executable must already be a valid local MCP server and must never spawn an upstream server.
 
-- [ ] **Step 4: Delete all launcher delegation code**
+- [ ] **Step 4: Delete launcher delegation code**
 
 Delete `src/launcher.ts` and `test/launcher.test.ts`. Remove `PREREQUISITE_COMMAND`, `BEVY_BRP_MCP_BIN`, `launchUpstream`, and all ENOENT install guidance from source.
 
-- [ ] **Step 5: Run server/package gates**
+- [ ] **Step 5: Rewrite the packed CLI smoke test around MCP initialization**
+
+Replace the fake-upstream executable flow in `scripts/smoke-packed-cli.mjs` with:
+
+1. `npm pack` into a temp directory;
+2. install the tarball there;
+3. use the repo's `@modelcontextprotocol/client` to spawn the installed `node_modules/.bin/bevy-plugin`;
+4. `client.connect()` successfully;
+5. `client.listTools()` returns an array (possibly empty at this task boundary);
+6. `client.close()` causes the packed server process to exit cleanly;
+7. assert no `BEVY_BRP_MCP_BIN` or fake executable is involved.
+
+Core transport:
+
+```js
+const transport = new StdioClientTransport({
+  command: path.join(tmpDir, 'node_modules', '.bin', 'bevy-plugin'),
+  cwd: tmpDir,
+  stderr: 'inherit',
+  env: { ...process.env },
+});
+await client.connect(transport);
+assert.ok(Array.isArray((await client.listTools()).tools));
+await client.close();
+```
+
+- [ ] **Step 6: Run server/package gates**
 
 ```bash
 npm run typecheck
@@ -342,12 +368,12 @@ npm test
 npm run smoke:packed
 ```
 
-Expected: PASS; packed CLI starts the local Node server rather than looking for `bevy_brp_mcp`.
+Expected: PASS; packed CLI initializes the local Node MCP server.
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 7: Commit**
 
 ```bash
-git add package.json package-lock.json src test
+git add package.json package-lock.json src test scripts/smoke-packed-cli.mjs
 git commit -m "feat: own MCP server bootstrap"
 ```
 
@@ -391,20 +417,13 @@ export class BrpClient {
 
 - [ ] **Step 1: Write transport tests against a local HTTP server**
 
-Cover four cases:
+Cover:
 
 ```ts
-// success
 assert.deepEqual(await client.call('world.query', { data: {} }, { port }), expectedResult);
-
-// JSON-RPC error
 await assert.rejects(() => client.call('world.query', {}, { port }), BrpError);
-
-// malformed JSON
-await assert.rejects(() => client.call('world.query', {}, { port }), /invalid JSON/i);
-
-// timeout
-await assert.rejects(() => client.call('world.query', {}, { port, timeoutMs: 10 }), /timed out/i);
+await assert.rejects(() => client.call('world.query', {}, { port: malformedPort }), /invalid JSON/i);
+await assert.rejects(() => client.call('world.query', {}, { port: slowPort, timeoutMs: 10 }), /timed out/i);
 ```
 
 Also assert the request body contains exactly `jsonrpc`, numeric `id`, `method`, and `params` and targets `http://127.0.0.1:<port>`.
@@ -413,19 +432,17 @@ Run and verify FAIL.
 
 - [ ] **Step 2: Implement `BrpClient` with native fetch**
 
-Use `AbortSignal.any` / `AbortSignal.timeout` when available in Node 20, or an `AbortController` timer when TypeScript typings make the former awkward. Increment request IDs per client instance. Preserve JSON-RPC `error.code`, `error.message`, and `error.data` in `BrpError`.
+Use an `AbortController` plus timer for timeout and combine a caller signal by forwarding its abort into the controller. Increment request IDs per client instance. Preserve JSON-RPC `error.code`, `error.message`, and `error.data` in `BrpError`.
 
 Do not retry connection failures.
 
 - [ ] **Step 3: Implement `discover()`**
 
-`discover(port)` is exactly:
-
 ```ts
 return this.call('rpc.discover', {}, { port });
 ```
 
-No caching in v1.
+No caching in this PR.
 
 - [ ] **Step 4: Wire the concrete client into `createServices()` and run tests**
 
@@ -445,7 +462,7 @@ git commit -m "feat: add local Bevy BRP client"
 
 ---
 
-### Task 3: Register the complete catalog and direct world/resource tools
+### Task 3: Add the parity fixture and direct world/resource tools
 
 **Files:**
 - Create: `src/tools/schemas/common.ts`
@@ -477,18 +494,16 @@ export function registerDirectBrpTool<T extends z.ZodType>(
 
 The helper parses MCP args, removes only the MCP-only `port` field, calls `services.brp.call(method, brpParams, { port })`, and returns structured content. It must not accept a method dynamically at call time.
 
-- [ ] **Step 1: Add the exact 49-name catalog test**
+- [ ] **Step 1: Add a green parity-list fixture test**
 
-Copy `EXPECTED_TOOL_NAMES` from the parity contract above into `test/catalog.test.ts`. Connect an official MCP client to the built server over stdio and compare sorted names:
+Copy `EXPECTED_TOOL_NAMES` from this plan into `test/catalog.test.ts` and assert only the contract itself initially:
 
 ```ts
-assert.deepEqual(
-  tools.map((tool) => tool.name).sort(),
-  [...EXPECTED_TOOL_NAMES].sort(),
-);
+assert.equal(EXPECTED_TOOL_NAMES.length, 49);
+assert.equal(new Set(EXPECTED_TOOL_NAMES).size, 49);
 ```
 
-At this stage the test should FAIL because most tools are not registered. Keep it red until Tasks 3-8 complete; use domain tests for incremental green cycles.
+Task 8 will extend this same test to compare the actual registered server tool names. Do not leave a deliberately red catalog test across multiple tasks.
 
 - [ ] **Step 2: Transcribe direct core parameter structs into Zod**
 
@@ -506,8 +521,6 @@ Use pinned upstream commit `85d0eca...` and the parameter-type map in this plan.
 Add one `safeParse` valid case and one invalid case per schema group. Do not use root catch-all schemas.
 
 - [ ] **Step 3: Register direct world tools**
-
-Implement these mappings explicitly:
 
 ```ts
 const WORLD_DIRECT = {
@@ -553,7 +566,9 @@ Use a fake `BrpClient` recording calls. For every mapping above, call the regist
 - [ ] **Step 6: Run domain tests and commit**
 
 ```bash
-npx tsc -p tsconfig.test.json && node --test .test-build/test/world-tools.test.js
+npx tsc -p tsconfig.test.json && node --test \
+  .test-build/test/catalog.test.js \
+  .test-build/test/world-tools.test.js
 npm run typecheck
 ```
 
@@ -578,7 +593,7 @@ git commit -m "feat: add core Bevy world tools"
 **Interfaces:**
 
 ```ts
-export type NameMatchMode = 'exact' | 'contains' | 'prefix';
+export type NameMatchMode = 'exact' | 'prefix' | 'suffix' | 'contains';
 
 export function findEntitiesByName(
   services: BevyMcpServices,
@@ -591,15 +606,20 @@ export function buildAllTypeGuides(registry: unknown): TypeGuide[];
 
 - [ ] **Step 1: Write failing name-resolution tests**
 
-Mock `world.query` to return reflected `Name` values. Verify exact/contains/prefix modes, deterministic entity-ID ordering, empty results, and case behavior matching the pinned upstream contract.
+Mock `world.query` to return reflected `Name` values. Verify:
+
+- default mode is `exact`;
+- `exact`, `prefix`, `suffix`, and `contains`;
+- matching is case-sensitive;
+- `*` is literal rather than wildcard syntax;
+- deterministic ascending entity-ID order;
+- empty results are valid.
 
 - [ ] **Step 2: Implement `world_find_entities_by_name`**
 
-Use ordinary reflected-name BRP query data and local filtering. Do not call `brp_execute`. Keep `findEntitiesByName()` exported because screenshot uses the same exact-name resolver later.
+Build exactly one standard `world.query` for the reflected `bevy_core::name::Name` component using both `data.components` and `filter.with`, then filter locally. Do not call `brp_execute`. Keep `findEntitiesByName()` exported because screenshot uses the exact-name path later.
 
 - [ ] **Step 3: Write and implement `brp_execute` discovery validation**
-
-Test sequence:
 
 ```ts
 await handler({ method: 'bevy_mcp/world_stats', params: { limit: 1 }, port: 15702 });
@@ -607,13 +627,11 @@ assert.equal(calls[0].method, 'rpc.discover');
 assert.equal(calls[1].method, 'bevy_mcp/world_stats');
 ```
 
-Unknown methods fail after discovery and never issue the second call. This tool is not imported by any other tool module.
+Unknown methods fail after discovery and never issue the second call. No other tool module imports the `brp_execute` handler.
 
 - [ ] **Step 4: Implement `brp_list_agent_tools`**
 
-Call the application agent-tool BRP method provided by `BrpExtrasPlugin`, normalize its returned `tools` array, and preserve `name`, `method`, `description`, `params_schema`, and `result_schema`.
-
-Add a fixture-shaped unit test containing `bevy_mcp_world_stats` and `bevy_mcp_time_control`.
+Call BRP method `brp_extras/agent_tools`, normalize its returned tools array, and preserve `name`, `method`, `description`, `params_schema`, and `result_schema`. Add a unit fixture containing `bevy_mcp_world_stats` and `bevy_mcp_time_control`.
 
 - [ ] **Step 5: Write failing type-guide tests from representative registry schemas**
 
@@ -693,7 +711,7 @@ Cover:
 ```text
 full capture                  -> direct screenshot params
 camera-only capture           -> camera passed through
-entity capture                -> entity + padding
+entity capture                -> entity + default/explicit padding
 exact-name unique match       -> resolve name, send resolved entity
 entity + name                 -> input error before BRP call
 padding without entity/name   -> input error before BRP call
@@ -703,9 +721,9 @@ name with multiple matches    -> error containing candidate entity IDs
 
 - [ ] **Step 4: Implement `brp_extras_screenshot` explicitly**
 
-Never call `brp_execute`. Name selection must call `findEntitiesByName(..., match_mode: 'exact')`, require exactly one result, then call `brp_extras/screenshot` with entity/camera/padding/path.
+Never call `brp_execute`. Name selection calls `findEntitiesByName(..., match_mode: 'exact')`, requires exactly one result, then calls `brp_extras/screenshot` with entity/camera/padding/path.
 
-- [ ] **Step 5: Verify all extras mappings and annotations**
+- [ ] **Step 5: Verify mappings and annotations**
 
 Read-only annotation only for diagnostics. Input/screenshot/mouse/keyboard/gesture operations are non-read-only. Set-window-title is idempotent.
 
@@ -736,7 +754,7 @@ git commit -m "feat: add Bevy extras MCP tools"
 
 ```ts
 export interface ActiveWatch {
-  id: string;
+  id: number;
   kind: 'get_components' | 'list_components';
   entity: number;
   types?: string[];
@@ -749,7 +767,7 @@ export class WatchManager {
   startGetComponents(input: { entity: number; types: string[]; port: number }): Promise<ActiveWatch>;
   startListComponents(input: { entity: number; port: number }): Promise<ActiveWatch>;
   list(): ActiveWatch[];
-  stop(id: string): Promise<boolean>;
+  stop(id: number): Promise<void>;
   stopAll(): Promise<void>;
 }
 ```
@@ -758,13 +776,15 @@ export class WatchManager {
 
 Test that:
 
+- IDs start at 1 and increase monotonically;
 - initial read failure means no watch is registered;
 - get-components requires at least one type;
-- successful start returns UUID + log path;
+- successful start returns numeric ID + log path;
 - unchanged snapshots are not logged repeatedly;
 - changed snapshots append one event;
 - `list()` reports active watches;
-- `stop(id)` aborts polling and returns true once/false when already absent;
+- `stop(id)` aborts polling;
+- stopping an unknown/inactive ID throws a watch-not-found error;
 - `stopAll()` empties the registry.
 
 Use a configurable 5 ms interval in tests; production default remains 250 ms.
@@ -775,7 +795,7 @@ Add a small internal canonical JSON serializer that recursively sorts object key
 
 - [ ] **Step 3: Implement watch polling and watch log output**
 
-`startGetComponents` polls `world.get_components`; `startListComponents` polls `world.list_components`. Each watch owns one `AbortController` and one log stream/file. Log changed snapshots as timestamped JSON lines.
+`startGetComponents` performs an initial `world.get_components` call and polls the same method. `startListComponents` performs an initial `world.list_components` call and polls the same method. Each watch owns one `AbortController` and one log stream/file. Log only changed snapshots as timestamped JSON lines.
 
 - [ ] **Step 4: Implement the four watch tools**
 
@@ -784,7 +804,7 @@ Add a small internal canonical JSON serializer that recursively sorts object key
 - `brp_list_active_watches`
 - `brp_stop_watch`
 
-Return the started watch ID and log path from start tools. `brp_stop_watch` fails clearly for a missing ID only if that matches the pinned public contract; otherwise return `stopped: false` deterministically.
+`world_get_components_watch` schema requires `{ entity, types, port? }` and rejects an empty `types` array. Start tools return `watch_id` and `log_path`. `brp_stop_watch` accepts numeric `watch_id` and returns a tool error for an inactive ID.
 
 - [ ] **Step 5: Run tests and commit**
 
@@ -883,7 +903,7 @@ Run Cargo with JSON messages:
 cargo build --message-format=json-render-diagnostics --manifest-path <manifest> --package <pkg> --bin <name>
 ```
 
-or `--example <name>`. Add `--release` only for release profile. Stream rendered diagnostics into the launch log/trace as useful, but do not implement freshness detection.
+or `--example <name>`. Add `--release` only for release profile. Parse Cargo's executable path instead of predicting `target/` layout. Do not implement custom freshness detection.
 
 - [ ] **Step 5: Implement `LogStore` and path-containment tests**
 
@@ -895,7 +915,7 @@ Owned root:
 <tmp>/bevy-mcp/mcp
 ```
 
-`LogStore` creates sanitized filenames, lists metadata, reads bounded full/tail content, and deletes only files whose canonical path remains under the owned root. Tests must reject `../` traversal and absolute external paths.
+`LogStore` creates sanitized filenames, lists metadata, reads bounded full/tail content, and deletes only files whose canonical path remains under the owned root. Tests reject `../` traversal and absolute external paths.
 
 - [ ] **Step 6: Implement `TraceLogger`**
 
@@ -911,8 +931,6 @@ Merge environment in this order:
 process.env < user env < BRP_EXTRAS_PORT=<assigned port>
 ```
 
-Track status by probing the PID with signal 0 plus BRP health/discovery when requested.
-
 - [ ] **Step 8: Implement `brp_list_bevy` and `brp_launch`**
 
 `brp_launch` resolution rules:
@@ -921,16 +939,18 @@ Track status by probing the PID with signal 0 plus BRP health/discovery when req
 2. choose app-first or example-first from `search_order`;
 3. apply `package_name` when provided;
 4. reject ambiguous matches with candidate package names;
-5. validate base port + instance count <= 65534;
+5. validate base port + instance count - 1 <= 65534;
 6. build once per selected target/profile;
 7. spawn `instance_count` processes with consecutive ports;
 8. return PIDs, ports, log files, target/package/profile metadata.
 
+Transcribe `ListBevyParams` and `LaunchBevyBinaryParams` into Zod, including `target_name`, optional `profile`, `path`, `package_name`, `port`, `instance_count`, `env`, `search_order`, and `args`.
+
 - [ ] **Step 9: Implement `brp_status` and `brp_shutdown`**
 
-`brp_status` combines tracked process state with a live BRP probe on the selected port.
+`brp_status` reports tracked process information and performs a live `rpc.discover` probe on the selected port to distinguish a running process from a ready BRP app.
 
-`brp_shutdown` first calls `brp_extras/shutdown`; then wait a bounded interval for process exit. If the server tracks a still-running PID, send ordinary process termination. Do not add cross-platform process-tree libraries in this PR.
+`brp_shutdown` first calls `brp_extras/shutdown`; then waits a bounded interval for tracked process exit. If a tracked PID is still alive, send ordinary process termination and report the method used. Do not add a process-tree library in this PR.
 
 - [ ] **Step 10: Implement all five log/trace tools**
 
@@ -940,7 +960,7 @@ Track status by probing the PID with signal 0 plus BRP health/discovery when req
 - `brp_get_trace_log_path`
 - `brp_set_tracing_level`
 
-Transcribe the pinned upstream public parameter fields, but map them onto our owned log root and trace logger.
+Transcribe the pinned upstream public parameter fields, but map them onto the repository-owned log root and trace logger.
 
 - [ ] **Step 11: Run tests and commit**
 
@@ -960,11 +980,10 @@ git commit -m "feat: own Bevy app runtime and logs"
 
 ---
 
-### Task 8: Finish registration and make the 49-tool catalog gate green
+### Task 8: Finish registration and make the exact 49-tool catalog gate green
 
 **Files:**
 - Modify: `src/tools/register.ts`
-- Modify: `src/server.ts`
 - Modify: `test/catalog.test.ts`
 - Modify domain tests as needed for annotations/descriptions
 
@@ -973,8 +992,6 @@ git commit -m "feat: own Bevy app runtime and logs"
 - Domain modules expose `registerXTools(server, services)` functions only; they do not import each other except the explicit screenshot -> `findEntitiesByName` helper.
 
 - [ ] **Step 1: Register every domain exactly once**
-
-`register.ts` should remain straightforward:
 
 ```ts
 export function registerTools(server: McpServer, services: BevyMcpServices) {
@@ -992,16 +1009,25 @@ export function registerTools(server: McpServer, services: BevyMcpServices) {
 
 No reflection or auto-discovery of modules.
 
-- [ ] **Step 2: Make catalog test assert exactly 49 unique tools**
+- [ ] **Step 2: Extend the catalog test to spy on real registration**
 
-Also assert:
+Use a minimal `McpServer` test double whose `registerTool(name, ...)` records names, then call the real `registerTools()` with fake services:
 
 ```ts
-assert.equal(new Set(toolNames).size, 49);
-assert.equal(toolNames.length, 49);
+const registered: string[] = [];
+const server = {
+  registerTool(name: string) {
+    registered.push(name);
+  },
+} as unknown as McpServer;
+
+registerTools(server, fakeServices());
+assert.equal(registered.length, 49);
+assert.equal(new Set(registered).size, 49);
+assert.deepEqual(registered.slice().sort(), EXPECTED_TOOL_NAMES.slice().sort());
 ```
 
-No extra helper/health/internal tools may leak into the public catalog.
+This keeps the unit catalog gate independent of build artifacts. Task 9 integration separately verifies the actual MCP client's `listTools()` response.
 
 - [ ] **Step 3: Add standard MCP annotations**
 
@@ -1020,7 +1046,7 @@ npm run typecheck
 npm run build
 ```
 
-Expected: PASS, including the 49-tool catalog gate.
+Expected: PASS, including exact 49-tool registration.
 
 - [ ] **Step 5: Commit**
 
@@ -1081,7 +1107,7 @@ new StdioClientTransport({
 
 - [ ] **Step 3: Assert the complete 49-tool list first**
 
-Integration must fail before launching a fixture if any tool is missing/duplicated.
+Integration must fail before launching a fixture if any tool is missing or duplicated.
 
 - [ ] **Step 4: Exercise one real behavior path from every domain**
 
@@ -1110,7 +1136,7 @@ MCP initialize
 -> brp_execute bevy_mcp/world_stats
 -> brp_execute bevy_mcp/time_control pause/resume
 -> brp_extras_get_diagnostics
--> one harmless input operation (move mouse or set window title)
+-> one harmless input operation (set window title)
 -> brp_extras_screenshot to temp PNG
 -> brp_list_logs + brp_read_log for launched app
 -> brp_shutdown
@@ -1191,7 +1217,7 @@ The historical name may appear in the new design/plan docs explaining removal, s
 "check:no-upstream": "node scripts/check-no-upstream-runtime.mjs"
 ```
 
-`test/upstream-independence.test.ts` can invoke the scanner module and assert no violations, while CI also calls the script directly.
+`test/upstream-independence.test.ts` imports the scanner and asserts zero violations. CI also calls the script directly.
 
 - [ ] **Step 3: Remove the CI upstream install step**
 
@@ -1237,7 +1263,7 @@ npm run smoke:packed
 xvfb-run -a npm run test:integration
 ```
 
-Expected: all PASS on a machine where `which bevy_brp_mcp` may return nothing.
+Expected: all PASS on a machine where `bevy_brp_mcp` is not installed.
 
 - [ ] **Step 7: Inspect packed npm contents**
 
@@ -1260,17 +1286,21 @@ git commit -m "docs: finish owned Bevy MCP migration"
 
 Before opening/updating the single implementation PR, verify all of the following manually:
 
-- [ ] Exactly 49 public MCP tools are listed; no helper/internal tool leaks.
+- [ ] Exactly 49 public MCP tools are registered; no helper/internal tool leaks.
 - [ ] Every `ToolName` variant from pinned upstream commit `85d0eca...` has a local implementation or the explicitly always-enabled trace equivalent.
 - [ ] Every known public parameter struct was transcribed into Zod; no root catch-all schema hides unfinished parity.
 - [ ] No handler except `brp_execute` accepts a dynamic BRP method.
 - [ ] No handler imports/calls `brp_execute` as a fallback.
+- [ ] `world_find_entities_by_name` supports exact/prefix/suffix/contains and case-sensitive literal matching.
 - [ ] Screenshot and entity-name lookup are real composites.
-- [ ] Watches are owned by one `WatchManager` and cleaned up on shutdown.
+- [ ] Watch IDs are monotonic numeric IDs and owned by one `WatchManager`.
+- [ ] Unknown `brp_stop_watch` IDs produce tool errors.
+- [ ] Watches are cleaned up on MCP server shutdown.
 - [ ] Cargo uses metadata + JSON compiler artifacts, not handwritten Cargo.toml parsing or upstream freshness logic.
 - [ ] Process state is in memory only.
 - [ ] Log tools are restricted to the owned temp root.
 - [ ] Type guides use one registry response for the all-types path.
+- [ ] Packed smoke test performs a real MCP initialization against the installed tarball.
 - [ ] Integration starts `build/index.js` directly and covers every tool family.
 - [ ] CI never installs `bevy_brp_mcp`.
 - [ ] Packed npm package is sufficient to start the MCP server.
