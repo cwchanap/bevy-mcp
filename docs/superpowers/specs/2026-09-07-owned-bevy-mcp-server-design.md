@@ -2,415 +2,389 @@
 
 ## Status
 
-Approved on September 7, 2026. This design supersedes `docs/superpowers/specs/2026-09-03-generic-bevy-mcp-design.md` for the next implementation PR.
+Approved on September 7, 2026 and revised after design review on the same date. This design supersedes `docs/superpowers/specs/2026-09-03-generic-bevy-mcp-design.md`.
 
-The previous design deliberately delegated the MCP server to `bevy_brp_mcp`. That boundary is removed. This repository will own the complete MCP server implementation and the complete currently exposed tool surface. The upstream project may be consulted as a behavioral reference while implementing parity, but it must not remain a runtime, build, install, subprocess, fallback, or packaging dependency.
+The previous architecture deliberately delegated MCP behavior to the external `bevy_brp_mcp` executable. That decision is reversed: this repository will own the complete **default** MCP server behavior itself. Upstream source may be consulted as a pinned behavioral/schema reference while implementing parity, but it must not remain a runtime, build, install, subprocess, fallback, or packaging dependency.
+
+## Review resolutions
+
+The review was accepted with the following resolutions:
+
+1. **Rewrite repository guidance.** `CLAUDE.md`/`AGENTS.md` currently forbid exactly this architecture. The planning branch updates that guidance before implementation begins, and the final migration task verifies it again.
+2. **Fix reflected Bevy `Name`.** Entity-name discovery must query `bevy_ecs::name::Name`, not `bevy_core::name::Name`. The live fixture gains a `Name` in the same implementation task as name discovery so mocks cannot hide a wrong reflected type path or JSON shape.
+3. **Pin one MCP result envelope.** Every tool returns structured content shaped as `{ message, result, metadata? }`; the existing integration journey already depends on that contract.
+4. **Target 47 default tools, not 49.** `brp_get_trace_log_path` and `brp_set_tracing_level` are behind upstream's non-default `mcp-debug` feature. They are not part of the default parity target and are removed together with the proposed `TraceLogger`.
+5. **Own process shutdown.** Spawned Bevy processes remain tracked and referenced. MCP shutdown stops watches, gracefully shuts down or terminates tracked Bevy processes, then closes the server. No `unref()` default.
+6. **One path owner.** `LogStore` creates every app/watch log path. `WatchManager` and `ProcessManager` only write to paths supplied by `LogStore`.
+7. **Keep TypeScript 5.x.** The server migration does not include a compiler-major upgrade. Add the MCP server SDK and Zod only; keep the current TypeScript 5.x line unless compilation proves a minimum-version bump is required.
+8. **Split implementation review boundaries, not PRs.** Cargo discovery/build and process/log ownership are separate implementation tasks and review checkpoints while remaining on the same branch/PR.
+9. **Expand independence cleanup.** CI's old `/tmp/bevy_brp_mcp_*.log` diagnostics, README, `CLAUDE.md`, and the `AGENTS.md` symlink target are part of the migration audit.
+10. **Snapshot the local contract.** The pinned upstream commit defines the migration input; local Zod/JSON-schema snapshots become the maintained contract after transcription.
+
+One review suggestion is intentionally **not** adopted: `brp_all_type_guides` is not dropped or given a new limit parameter because it is part of the default upstream tool surface and the user explicitly requested a complete rebuild. Its potentially large response is an accepted parity cost for this PR and is called out under Risks.
 
 ## Goal
 
-Ship `@cwchanap/bevy-plugin` as a self-contained TypeScript MCP server for Bevy development. A user with Node.js, Rust, and a Bevy project should be able to install the agent plugin and use the full Bevy MCP toolset without separately installing `bevy_brp_mcp`.
+Ship `@cwchanap/bevy-plugin` as a self-contained TypeScript MCP stdio server for Bevy development. A user with Node.js, Rust, and a Bevy project should be able to install the agent plugin and use the full default Bevy MCP toolset without separately installing `bevy_brp_mcp`.
 
 The existing Rust `bevy-mcp-bridge` remains the application-side integration layer. It composes `bevy_brp_extras` and registers the repository-owned `bevy_mcp/world_stats` and `bevy_mcp/time_control` BRP methods. `bevy_brp_extras` is not the upstream MCP server being removed; it remains an app-side BRP capability provider.
 
-## Principles
+## Product principles
 
-- One implementation PR for the full server rebuild.
-- Own every public MCP tool; no tool may use `brp_execute` as a fallback for a missing implementation.
-- `brp_execute` remains as a first-class public tool because raw discovered BRP execution is itself part of the supported toolset.
-- Preserve the current tool names and parameter intent as the parity contract, but do not preserve upstream internal architecture.
-- Prefer Node/TypeScript-native primitives and small modules over porting Rust macro frameworks, registries, build freshness optimizers, or other upstream implementation machinery.
-- Keep generic Bevy functionality only; no game-specific operations.
-- No backward-compatibility layer is required for this hobby project.
-- No persistence database, daemon, dependency injection framework, plugin framework, or generic schema code generator.
+- One implementation PR for the entire server rebuild.
+- Own every tool in the default upstream MCP catalog; no tool may use `brp_execute` as a fallback for a missing implementation.
+- `brp_execute` remains first-class because raw discovered BRP execution is itself part of the supported surface.
+- Preserve current default tool names and parameter intent as the migration parity contract; internal source layout may change freely.
+- Prefer small Node/TypeScript modules over porting Rust macros, registries, build-freshness logic, or other upstream implementation machinery.
+- Keep generic Bevy functionality only; no game-specific commands.
+- No backward-compatibility layer is required.
+- No persistence database, daemon, dependency-injection framework, plugin framework, or generic schema code generator.
 
 ## Compatibility baseline
 
-- Node.js: >=20
+- Node.js: `>=20`
 - MCP TypeScript SDK: `@modelcontextprotocol/server` 2.x
-- MCP client used by integration tests: `@modelcontextprotocol/client` 2.x
+- MCP integration client: `@modelcontextprotocol/client` 2.x
 - Schema library: Zod 4
-- TypeScript: 7.0.x
+- TypeScript: existing 5.x line (`^5.3.3` today), raised only if the server SDK actually requires it
 - Bevy: 0.19.x
 - `bevy_brp_extras`: 0.22.3
-- Rust: >=1.95, edition 2024
+- Rust: `>=1.95`, edition 2024
 - Default BRP port: 15702
-- Launch-time BRP port environment variable: `BRP_EXTRAS_PORT`
-- Native macOS/Linux/Windows development workflows
-- Agent Plugins metadata remains 1.0.0
+- Native macOS/Linux/Windows debugging
+
+## Parity source
+
+Implementation may consult upstream `natepiano/bevy_brp` commit:
+
+```text
+85d0ecaed0b4aaebc5ba6d2b54026489e9e5042b
+```
+
+This commit is a migration reference only. It is not fetched, built, linked, invoked, vendored, or packaged by this repository.
+
+The upstream `mcp-debug` feature has no default enablement, so its two trace-only tools are outside the default catalog. The owned default catalog contains **47 tools**.
+
+## Default 47-tool catalog
+
+### World / ECS / resource / discovery
+
+- `world_list_components`
+- `world_get_components`
+- `world_despawn_entity`
+- `world_insert_components`
+- `world_remove_components`
+- `world_list_resources`
+- `world_get_resources`
+- `world_insert_resources`
+- `world_remove_resources`
+- `world_mutate_resources`
+- `world_mutate_components`
+- `rpc_discover`
+- `world_query`
+- `world_find_entities_by_name`
+- `world_spawn_entity`
+- `world_trigger_event`
+- `registry_schema`
+- `world_reparent_entities`
+
+### Watches
+
+- `world_get_components_watch`
+- `world_list_components_watch`
+- `brp_stop_watch`
+- `brp_list_active_watches`
+
+### Dynamic/application discovery
+
+- `brp_execute`
+- `brp_list_agent_tools`
+
+### BRP extras
+
+- `brp_extras_screenshot`
+- `brp_extras_send_keys`
+- `brp_extras_type_text`
+- `brp_extras_set_window_title`
+- `brp_extras_move_mouse`
+- `brp_extras_send_mouse_button`
+- `brp_extras_click_mouse`
+- `brp_extras_double_click_mouse`
+- `brp_extras_drag_mouse`
+- `brp_extras_scroll_mouse`
+- `brp_extras_pinch_gesture`
+- `brp_extras_rotation_gesture`
+- `brp_extras_double_tap_gesture`
+- `brp_extras_get_diagnostics`
+
+### Application/process/log lifecycle
+
+- `brp_list_bevy`
+- `brp_launch`
+- `brp_shutdown`
+- `brp_status`
+- `brp_list_logs`
+- `brp_read_log`
+- `brp_delete_logs`
+
+### Type intelligence
+
+- `brp_type_guide`
+- `brp_all_type_guides`
 
 ## Architecture
 
 ```text
-Codex / Claude Code / Pi / other MCP client
-                    |
-                  stdio
-                    v
-          @cwchanap/bevy-plugin
-          TypeScript MCP server
-                    |
-       +------------+-------------+
-       |            |             |
-       v            v             v
- Cargo/runtime    Watch        Type-guide
- management      manager        builder
-       |            |             |
-       +------------+-------------+
-                    |
-                BrpClient
-                    |
-          localhost HTTP JSON-RPC
-                    v
-             Bevy 0.19 app
-                    |
-        +-----------+------------+
-        |                        |
- BrpExtrasPlugin           BevyMcpPlugin
- input/screenshot/...     world_stats/time_control
+Codex / Claude Code / Pi / MCP client
+                  |
+                  | stdio
+                  v
+       @cwchanap/bevy-plugin
+       TypeScript MCP server
+                  |
+       +----------+-----------+
+       |                      |
+       v                      v
+ Node runtime services    BRP JSON-RPC client
+ Cargo/process/log/watch        |
+                                | localhost HTTP
+                                v
+                          Bevy application
+                                |
+                    +-----------+-----------+
+                    |                       |
+              BrpExtrasPlugin          BevyMcpPlugin
+              screenshot/input/...     world_stats/time_control
 ```
 
-### MCP server
+### Ownership boundaries
 
-`src/index.ts` becomes the real executable entrypoint. It constructs an `McpServer`, registers all tools, connects a `StdioServerTransport`, and owns shutdown cleanup.
+**MCP server owns:** MCP stdio, tool registration/schemas, tool result envelopes, orchestration, annotations, and error conversion.
 
-The package uses the official MCP SDK instead of implementing MCP framing. Tool schemas are Zod objects registered directly with the SDK. Tool handlers return MCP content plus structured content where appropriate.
+**BRP client owns:** one JSON-RPC HTTP request, timeout/abort handling, response decoding, and BRP error normalization. It has no tool knowledge.
 
-### BRP client
+**Cargo runtime owns:** `cargo metadata` target discovery and `cargo build --message-format=json-render-diagnostics` artifact resolution. It always invokes Cargo build and relies on Cargo incremental compilation.
 
-One `BrpClient` owns BRP HTTP JSON-RPC calls.
+**Process manager owns:** live spawned-child state and lifecycle only. It does not create log paths and does not persist state.
+
+**LogStore owns:** the complete `<tmp>/bevy-mcp/{apps,watches}` path policy, safe file creation, list/read/delete, filename sanitization, and containment checks.
+
+**WatchManager owns:** monotonic watch IDs, polling, change detection, cancellation, and writing events to a `LogStore`-provided path. Watches are in-memory only.
+
+**Type-guide module owns:** pure transformation from live Bevy registry data into the public guide format. No copied upstream prose framework.
+
+## MCP result contract
+
+All handlers use one helper and one structured-content envelope:
 
 ```ts
-interface BrpCallOptions {
-  port?: number;
-  signal?: AbortSignal;
-  timeoutMs?: number;
+export interface ToolEnvelope<T = unknown, M extends Record<string, unknown> = Record<string, unknown>> {
+  message: string;
+  result: T;
+  metadata?: M;
 }
 
-class BrpClient {
-  call<T>(method: string, params: unknown, options?: BrpCallOptions): Promise<T>;
-  discover(port?: number): Promise<unknown>;
-}
+export function toolResult<T, M extends Record<string, unknown>>(
+  envelope: ToolEnvelope<T, M>,
+): CallToolResult;
 ```
 
-Responsibilities:
+`structuredContent` is exactly the envelope. `content` contains a short text representation of `message` for clients that do not use structured content.
 
-- POST JSON-RPC 2.0 requests to `http://127.0.0.1:<port>`;
-- monotonically increasing request IDs;
-- default port 15702;
-- timeout/abort support;
-- HTTP, malformed JSON, JSON-RPC error, and connection error normalization;
-- no retries hidden inside the client.
+Direct BRP wrappers put the decoded BRP payload in `result`. Composite/local tools may add stable metadata such as entity counts, PIDs, watch IDs, or log paths. Handlers do not invent top-level structured-content shapes.
 
-No tool except `brp_execute` accepts an arbitrary BRP method name.
+## BRP transport
 
-### Tool registration
+`BrpClient` uses native `fetch` against `http://127.0.0.1:<port>` with JSON-RPC 2.0 requests.
 
-Tools are grouped by domain modules, not generated through a macro/DSL framework. A small helper may register simple direct BRP wrappers, but composite tools keep explicit handlers.
+Responsibilities are intentionally small:
+
+- monotonically increasing request ID;
+- method + params serialization;
+- per-call port, defaulting to 15702;
+- timeout and caller abort propagation;
+- invalid/malformed response detection;
+- preservation of BRP `error.code`, `message`, and `data`.
+
+No retry layer, method cache, dynamic proxy, remote host support, or alternate transport is included.
+
+## Schemas and long-term parity
+
+Public MCP parameters are transcribed from the pinned default upstream contracts into local Zod 4 schemas. Known schemas must not be replaced by root `z.any()`, `z.unknown()`, or catch-all objects.
+
+Once transcribed, generated JSON Schema snapshots are committed in-repo. Those snapshots—not a live upstream checkout—become the maintained contract. A future Bevy/BRP upgrade is an explicit task that audits:
+
+1. the 47-name catalog;
+2. tool-to-BRP method tables;
+3. Zod contracts and JSON-schema snapshots;
+4. composites such as screenshot/name resolution;
+5. the real fixture journey.
+
+This maintenance cost is accepted as the price of eliminating the external MCP executable.
+
+## Direct tools vs composites
+
+Most tools are declarative mappings through one `registerDirectBrpTool` helper. The helper receives a fixed method at registration time; callers cannot choose it dynamically.
+
+Explicit local/composite handlers are limited to behavior that actually needs orchestration:
+
+- `world_find_entities_by_name`;
+- `brp_execute` discovery validation;
+- `brp_list_agent_tools` normalization;
+- `brp_extras_screenshot` name/entity selection;
+- watch start/list/stop;
+- application discovery/launch/status/shutdown;
+- log list/read/delete;
+- type guides.
+
+No other handler may call the `brp_execute` handler.
+
+## Reflected `Name`
+
+Entity-name lookup queries the reflected component type:
 
 ```text
-src/tools/
-  register.ts
-  world.ts
-  resources.ts
-  discovery.ts
-  extras.ts
-  watches.ts
-  app.ts
-  logs.ts
-  type-guides.ts
-  agent-tools.ts
+bevy_ecs::name::Name
 ```
 
-Every public tool is independently visible in the MCP tool list and independently tested.
+It performs one `world.query` using both `data.components` and `filter.with`, reads each returned Name value using the wire shape observed from Bevy 0.19, filters locally with case-sensitive `exact | prefix | suffix | contains`, and returns ascending entity IDs.
 
-## Complete parity catalog
-
-The owned server exposes 49 tools. The two trace/debug tools are always available in the TypeScript server instead of being hidden behind a Rust compile feature.
-
-### Core world / BRP tools
-
-| MCP tool | Implementation |
-| --- | --- |
-| `world_list_components` | direct `world.list_components` |
-| `world_get_components` | direct `world.get_components` |
-| `world_despawn_entity` | direct `world.despawn_entity` |
-| `world_insert_components` | direct `world.insert_components` |
-| `world_remove_components` | direct `world.remove_components` |
-| `world_list_resources` | direct `world.list_resources` |
-| `world_get_resources` | direct `world.get_resources` |
-| `world_insert_resources` | direct `world.insert_resources` |
-| `world_remove_resources` | direct `world.remove_resources` |
-| `world_mutate_resources` | direct `world.mutate_resources` |
-| `world_mutate_components` | direct `world.mutate_components` |
-| `rpc_discover` | direct `rpc.discover` |
-| `world_query` | direct `world.query` |
-| `world_find_entities_by_name` | local composite using reflected `Name` data |
-| `world_spawn_entity` | direct `world.spawn_entity` |
-| `world_trigger_event` | direct `world.trigger_event` |
-| `registry_schema` | direct `registry.schema` |
-| `world_reparent_entities` | direct `world.reparent_entities` |
-| `world_get_components_watch` | local watch manager + `world.get_components` polling |
-| `world_list_components_watch` | local watch manager + `world.list_components` polling |
-| `brp_execute` | discover-validated raw BRP call |
-| `brp_list_agent_tools` | direct `brp_extras/agent_tools` catalog read + normalization |
-
-### BRP extras tools
-
-| MCP tool | Implementation |
-| --- | --- |
-| `brp_extras_screenshot` | explicit composite, including selector validation/name resolution |
-| `brp_extras_send_keys` | direct `brp_extras/send_keys` |
-| `brp_extras_type_text` | direct `brp_extras/type_text` |
-| `brp_extras_set_window_title` | direct `brp_extras/set_window_title` |
-| `brp_extras_move_mouse` | direct `brp_extras/move_mouse` |
-| `brp_extras_send_mouse_button` | direct `brp_extras/send_mouse_button` |
-| `brp_extras_click_mouse` | direct `brp_extras/click_mouse` |
-| `brp_extras_double_click_mouse` | direct `brp_extras/double_click_mouse` |
-| `brp_extras_drag_mouse` | direct `brp_extras/drag_mouse` |
-| `brp_extras_scroll_mouse` | direct `brp_extras/scroll_mouse` |
-| `brp_extras_pinch_gesture` | direct `brp_extras/pinch_gesture` |
-| `brp_extras_rotation_gesture` | direct `brp_extras/rotation_gesture` |
-| `brp_extras_double_tap_gesture` | direct `brp_extras/double_tap_gesture` |
-| `brp_extras_get_diagnostics` | direct `brp_extras/get_diagnostics` |
-
-### Watch tools
-
-| MCP tool | Implementation |
-| --- | --- |
-| `brp_stop_watch` | stop one local watch by numeric ID |
-| `brp_list_active_watches` | return local watch registry |
-
-### Application tools
-
-| MCP tool | Implementation |
-| --- | --- |
-| `brp_list_bevy` | `cargo metadata --format-version 1 --no-deps` target discovery |
-| `brp_launch` | Cargo build + JSON compiler artifact parsing + executable spawn |
-| `brp_shutdown` | BRP graceful shutdown, then bounded tracked-process termination fallback |
-| `brp_status` | tracked process state plus live BRP probe |
-
-### Log / trace tools
-
-| MCP tool | Implementation |
-| --- | --- |
-| `brp_list_logs` | local app/watch/MCP log store |
-| `brp_read_log` | bounded local file read/tail |
-| `brp_delete_logs` | delete matching owned log files |
-| `brp_get_trace_log_path` | return current MCP trace file path |
-| `brp_set_tracing_level` | change local trace threshold |
-
-### Type tools
-
-| MCP tool | Implementation |
-| --- | --- |
-| `brp_type_guide` | build one mutation/read guide from `registry.schema` |
-| `brp_all_type_guides` | build guides for all registered types |
-
-## Cargo discovery and launch
-
-### Discovery
-
-`CargoRuntime.listTargets(root)` runs:
-
-```bash
-cargo metadata --format-version 1 --no-deps --manifest-path <resolved Cargo.toml>
-```
-
-It returns normalized app/example targets containing at minimum:
-
-```ts
-interface BevyTarget {
-  name: string;
-  kind: 'app' | 'example';
-  packageName: string;
-  manifestPath: string;
-  packageRoot: string;
-}
-```
-
-When the caller supplies `path`, targets outside the canonicalized path scope are filtered out even when Cargo metadata expands to a parent workspace.
-
-### Launch
-
-`brp_launch` supports:
-
-- `target_name`;
-- optional `profile` (`debug` or `release`);
-- optional root `path`;
-- optional `package_name` disambiguation;
-- `port` default 15702;
-- `instance_count` default 1;
-- optional environment map;
-- `search_order` (`app` default or `example`);
-- optional process args.
-
-For each selected target the server runs Cargo build with `--message-format=json-render-diagnostics`, parses the matching `compiler-artifact.executable`, then spawns that executable with:
-
-```text
-BRP_EXTRAS_PORT=<assigned port>
-```
-
-`instance_count > 1` receives consecutive ports from the base port. Always invoking Cargo build is intentional: Cargo performs its own incremental freshness check, so this avoids porting upstream's custom build-freshness subsystem.
-
-`ProcessManager` tracks PID, target/package, kind, port, start time, profile, and log file. There is no persistent process database.
-
-## Logs and tracing
-
-All files owned by the package live below one root such as:
-
-```text
-<os tmp>/bevy-mcp/
-  apps/
-  watches/
-  mcp/
-```
-
-App stdout/stderr go to app log files. Watches record change events as newline-delimited JSON or readable timestamped JSON lines. MCP trace logging records server/tool/BRP lifecycle diagnostics.
-
-Log tools never read arbitrary filesystem paths; they operate on file names or IDs resolved inside the owned log root.
-
-Trace levels are `off`, `error`, `warn`, `info`, `debug`, and `trace`. `brp_set_tracing_level` updates the in-process logger; no restart is required.
+The full fixture gains `Name::new("FixturePrimary")` in the same task as this composite, and the test must exercise the actual live BRP payload before screenshot-by-name is considered complete.
 
 ## Watches
 
-`WatchManager` is the sole owner of watch state.
+Watches are local polling tasks rather than a second BRP streaming transport.
 
-```ts
-interface ActiveWatch {
-  id: number;
-  kind: 'get_components' | 'list_components';
-  entity: number;
-  types?: string[];
-  port: number;
-  startedAt: string;
-  logPath: string;
-}
+Rules:
+
+- IDs start at 1 and increase monotonically;
+- a watch is registered only after its initial BRP read succeeds;
+- `world_get_components_watch` requires at least one component type;
+- default polling interval is 250 ms;
+- stable canonical JSON is used only for snapshot equality;
+- unchanged snapshots are not re-logged;
+- `LogStore` allocates the watch log path;
+- stopping an unknown watch is a tool error;
+- all watches stop during server shutdown.
+
+## Cargo and launch
+
+`brp_list_bevy` is based on `cargo metadata --format-version 1 --no-deps` and returns binary apps/examples with deterministic ordering.
+
+`brp_launch`:
+
+1. resolves the requested workspace/path;
+2. applies app/example search order and optional package disambiguation;
+3. validates the consecutive port range;
+4. runs Cargo build once for the selected target/profile;
+5. parses Cargo JSON `compiler-artifact.executable` rather than predicting target paths;
+6. asks `LogStore` for an app log path;
+7. spawns one or more referenced child processes with consecutive ports;
+8. sets `BRP_EXTRAS_PORT` after user environment merging;
+9. records child metadata in memory.
+
+No custom freshness optimizer is ported.
+
+## Process lifecycle
+
+Spawned children are **not** `unref()`ed.
+
+`brp_shutdown` first requests `brp_extras/shutdown`, waits a bounded interval, then terminates a still-running tracked process if needed.
+
+A single MCP cleanup function is used by signals and stdio/server shutdown:
+
+```text
+WatchManager.stopAll()
+-> ProcessManager.shutdownAll()
+-> server.close()
+-> exit
 ```
 
-Watch IDs start at 1 and increase monotonically for the life of the MCP server, matching the pinned upstream public contract. A watch starts only after an initial BRP request succeeds. `world_get_components_watch` requires at least one component type. The manager takes an initial snapshot, polls the appropriate ordinary BRP read, writes only changed snapshots, and uses stable deep JSON equality after canonical key ordering.
+`shutdownAll()` tries graceful BRP shutdown for known ready ports where practical, then sends ordinary process termination to any remaining tracked child. No process-tree dependency or daemon is added.
 
-Default poll interval: 250 ms. `brp_stop_watch` returns a tool error when the requested watch ID is not active. `brp_stop_watch` aborts the polling task and closes its log stream. Server shutdown aborts every active watch.
+## Logs
 
-The watch tools are implemented locally rather than depending on `+watch` transport behavior. This keeps the implementation small and testable while preserving the user-facing watch capability.
+All owned files live below:
 
-## Composite discovery tools
+```text
+<tmp>/bevy-mcp/apps/
+<tmp>/bevy-mcp/watches/
+```
 
-### `world_find_entities_by_name`
+`LogStore` alone creates paths. `ProcessManager` receives an app log path; `WatchManager` receives a watch log path.
 
-Query reflected `bevy_core::name::Name` values, then apply the requested case-sensitive `exact`, `prefix`, `suffix`, or `contains` matching locally. Asterisks are ordinary literal characters. Return canonical entity IDs and names in deterministic entity-ID order. This tool is a convenience composite, not a raw `world.query` alias.
+`brp_list_logs`, `brp_read_log`, and `brp_delete_logs` operate only inside this root. Canonical containment prevents path traversal or arbitrary file deletion.
 
-### `brp_extras_screenshot`
-
-Parameters support full-screen/camera capture plus mutually exclusive `entity` or exact `name` selection and optional padding. Invalid selector combinations fail before a BRP request. Exact name capture resolves through `world_find_entities_by_name`; zero matches fail, multiple matches fail with candidate IDs, and one match calls `brp_extras/screenshot` with the resolved entity ID.
-
-### `brp_list_agent_tools`
-
-Call `brp_extras/agent_tools`, preserve its typed parameter/result schemas, and return its curated agent-tool document as an MCP-friendly structured result.
-
-### `brp_execute`
-
-Call `rpc.discover` first and reject methods absent from the live app catalog. Only then issue the requested raw BRP call. Other tool handlers must not call `brp_execute` internally.
+MCP-internal observability uses stderr; there is no public trace subsystem in this PR.
 
 ## Type guides
 
-Type guides are built locally from `registry.schema` rather than copied from upstream text files.
+`brp_type_guide` and `brp_all_type_guides` remain part of parity.
 
-For one registered type the guide should include:
-
-- full type path and short name;
-- whether registry metadata identifies it as a component/resource when available;
-- JSON shape and required fields;
-- enum variants;
-- nested referenced types needed to construct a valid value;
-- concrete guidance for `world_insert_components` / `world_mutate_components` or resource equivalents;
-- read-only guidance when the schema is not constructible.
-
-`brp_all_type_guides` calls `registry.schema` once and builds all guides from that response rather than issuing one request per type.
-
-## Result and error behavior
-
-Use one small helper for successful tool results:
-
-```ts
-function toolResult(message: string, structuredContent?: Record<string, unknown>) {
-  return {
-    content: [{ type: 'text' as const, text: message }],
-    structuredContent,
-  };
-}
-```
-
-Expected failures are returned as MCP tool errors with concise messages and structured diagnostic data where useful. Preserve BRP error code/message/data. Avoid an elaborate local error class hierarchy: `BrpError`, `ToolInputError`, and normal `Error` are sufficient.
+Implementation uses pure transforms over current registry/list responses rather than copying the upstream type-guide framework. `brp_all_type_guides` remains potentially large because changing its public contract or dropping it would violate the requested default parity. It should use bounded internal work (one relevant registry fetch/pass rather than N redundant requests) but returns the complete compatible result.
 
 ## Testing strategy
 
-### Unit tests
+Testing proceeds by domain while remaining one PR:
 
-- exact 49-tool catalog test;
-- every direct tool's MCP name -> BRP method mapping;
-- input schema validation for every tool;
-- BRP transport success/error/timeout/malformed response;
-- screenshot/name-resolution composites;
-- watch start/change/stop/list behavior;
-- Cargo metadata target normalization/path scoping;
-- Cargo compiler-artifact parsing;
-- process tracking and shutdown fallback;
-- log path containment/read/tail/delete;
-- type-guide generation;
-- upstream-independence guard.
+1. server bootstrap + result envelope;
+2. BRP transport;
+3. direct world/resource schemas and mappings;
+4. live fixture-backed name discovery + application tools + type guides;
+5. extras and screenshot composite;
+6. shared LogStore + watches;
+7. Cargo discovery/build, including a real metadata check against this workspace;
+8. process/app lifecycle + log tools;
+9. exact 47-tool registration + local JSON-schema snapshots;
+10. real MCP client -> owned server -> Bevy fixture journey;
+11. CI/docs/upstream-independence cleanup.
 
-### Real integration
-
-Expand the existing full Bevy fixture with reflected components/resources and named entities. Run the shipped Node MCP server through the official MCP client and test:
-
-1. initialize/list tools and assert all 49 names;
-2. discover the fixture;
-3. launch it on a test port;
-4. list/query/get/mutate components;
-5. get/mutate a reflected resource;
-6. spawn and despawn an entity;
-7. find a named entity;
-8. start a watch, cause a mutation, observe a watch log change, stop it;
-9. generate a type guide;
-10. list and execute `bevy_mcp/world_stats` and `bevy_mcp/time_control` through agent-tool support;
-11. diagnostics and at least one input operation;
-12. screenshot to a temporary PNG;
-13. read the launched app log;
-14. shut down and verify process exit.
-
-## Upstream-independence gate
-
-The finished package must contain no runtime/build/install dependency on `bevy_brp_mcp`.
-
-A CI script scans production/package paths (`src`, `test`, `scripts`, `.github`, package manifests, plugin metadata, and README) and fails on references that install, execute, import, or require `bevy_brp_mcp`. Design/history documents may name it only to explain the removed architecture.
-
-The integration job must not run `cargo install bevy_brp_mcp` and must pass on a clean runner without that executable.
-
-## Documentation migration
-
-The implementation PR deletes the obsolete `2026-09-03` upstream-delegation spec/plan once the new server is implemented, then rewrites README architecture, prerequisites, development commands, and CI notes around the self-contained npm MCP server.
-
-The agent-plugin metadata remains unchanged in shape: clients still execute `npx -y @cwchanap/bevy-plugin@<version>`. Only the implementation behind that command changes.
+Each implementation task gets its own test/commit/review checkpoint while all commits remain on the same implementation PR.
 
 ## Non-goals
 
-- Rebuilding `bevy_brp_extras` inside TypeScript/Rust in this task.
-- Game-specific debug/gameplay tools.
+- Reimplementing `bevy_brp_extras`.
+- Publishing the Rust bridge to crates.io.
+- Game-specific debug operations.
+- Standalone `bevy_ecs::World` transport.
 - WASM/browser relay.
-- Remote-network BRP discovery.
-- Persistent process/watch state across MCP restarts.
-- Automatic editing of consumer Bevy projects.
-- Cross-engine abstraction shared with Godot.
-- Copying upstream Rust macro/meta-programming architecture.
-- Matching upstream internal log file names, cache implementation, build-freshness optimization, or source layout.
+- Remote-host discovery/network authentication.
+- Automatic source/project rewriting.
+- Persistent process/watch state.
+- A custom MCP implementation.
+- Rust-style macro/code generation for tool registration.
+- Custom Cargo freshness detection.
+- Public MCP trace/debug tools outside the default upstream catalog.
+
+## Risks and mitigations
+
+### Schema drift
+
+Owning ~47 tool contracts means future Bevy/BRP upgrades require explicit maintenance. Mitigation: local Zod schemas, committed JSON-schema snapshots, exact catalog/method tests, and a pinned migration reference.
+
+### Reflected type drift
+
+A wrong reflected path or payload shape can make composites silently return no matches. Mitigation: use `bevy_ecs::name::Name` and add a live fixture assertion in the same task as name lookup.
+
+### Orphaned processes
+
+If child processes are detached/unreferenced, closing an agent session can leave windows and occupied BRP ports. Mitigation: keep children referenced and use one cleanup path for signals/stdio close.
+
+### Large all-type-guide responses
+
+`brp_all_type_guides` can produce a large response on large applications. This is intentionally retained for default parity in this PR. If it becomes problematic, changing that public tool is a separate explicit product decision rather than a hidden migration deviation.
 
 ## Definition of done
 
-On a clean machine with Node.js, Rust, this repository, and the fixture Bevy project—but without `bevy_brp_mcp` installed—the packaged `@cwchanap/bevy-plugin` executable:
+A clean environment containing Node.js, Rust, this repository, and the fixture Bevy app—but **no installed `bevy_brp_mcp` executable**—must:
 
-1. starts as a valid MCP stdio server;
-2. exposes all 49 owned tools;
-3. implements every tool locally rather than using a missing-tool fallback;
-4. completes the real Bevy integration journey;
-5. supports the existing `bevy-mcp-bridge` application methods;
-6. passes package smoke tests and CI; and
-7. contains zero runtime/build/install dependency on the removed upstream MCP server.
+1. install/build `@cwchanap/bevy-plugin`;
+2. start it directly as an MCP stdio server;
+3. expose exactly the 47 default parity tools;
+4. pass local schema snapshots and domain tests;
+5. discover/build/launch the real fixture;
+6. exercise representative behavior from every tool family;
+7. shut down watches and spawned apps without orphaning processes;
+8. complete screenshot/log/type/agent-tool journeys;
+9. pass Rust, Node, packed-package, independence, and Xvfb integration CI gates;
+10. contain no runtime/build/install/subprocess dependency on `bevy_brp_mcp`.
