@@ -15,6 +15,8 @@ Implementation continues on the same branch/PR as those planning documents. Do n
 
 The old September 3 design deliberately forbade a local MCP server, BRP client, Cargo discovery, process manager, and ECS tool layer. That decision is superseded. Do **not** use the old design as an implementation constraint.
 
+This branch is still planning/guidance-only at the moment: `src/index.ts`/`src/launcher.ts`, current CI, and current runtime behavior remain upstream-delegating until Task 1 begins. The guidance is changed now so the implementation agent does not follow the superseded architecture lock.
+
 ## Migration target
 
 `@cwchanap/bevy-plugin` becomes the actual MCP stdio server. It will own the complete **47-tool default** Bevy MCP surface locally using:
