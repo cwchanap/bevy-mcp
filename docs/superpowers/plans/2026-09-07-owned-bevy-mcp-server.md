@@ -624,6 +624,8 @@ Call `brp_extras/agent_tools` and preserve `name`, `method`, `description`, `par
 
 `brp_type_guide` transforms one requested registered type. `brp_all_type_guides` preserves the default upstream port-only public contract and returns the complete compatible guide set. Use shared pure transformation functions and avoid N redundant registry fetches.
 
+This intentionally does **not** add `limit`/`truncated` or drop the all-types tool. The user requested the complete default upstream surface, and upstream's default `AllTypeGuidesParams` contains only `port`; changing that contract is outside this migration.
+
 Test struct component, resource, enum, nested reference, required fields, and non-constructible schema cases.
 
 - [ ] **Step 8: Run and commit**
