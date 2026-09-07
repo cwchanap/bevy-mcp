@@ -6,6 +6,8 @@ Approved on September 7, 2026 and revised after design review on the same date. 
 
 The previous architecture deliberately delegated MCP behavior to the external `bevy_brp_mcp` executable. That decision is reversed: this repository will own the complete **default** MCP server behavior itself. Upstream source may be consulted as a pinned behavioral/schema reference while implementing parity, but it must not remain a runtime, build, install, subprocess, fallback, or packaging dependency.
 
+This draft PR remains planning/guidance only: no MCP runtime behavior is changed by this document revision. `CLAUDE.md` and README are updated only to mark the approved migration and prevent future work from following the superseded architecture while implementation continues on the same PR.
+
 ## Review resolutions
 
 The review was accepted with the following resolutions:
