@@ -1,104 +1,110 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+This file provides repository guidance for agentic development.
 
-## What this repo is (and deliberately is not)
+## Active architecture direction
 
-This repo does **not** implement an MCP server. Upstream `bevy_brp_mcp` 0.22.3 (installed via
-`cargo install`, not vendored here) owns the entire generic tool surface: target discovery, launch,
-logs, ECS query/mutate/watch, type guides, `rpc.discover`, raw BRP execution, and the
-`bevy_brp_extras` passthroughs (screenshot, input, diagnostics, shutdown).
+This repository is migrating from a thin launcher around the external `bevy_brp_mcp` executable to a **fully repository-owned TypeScript MCP server**.
 
-This repo owns exactly two things:
+The approved design and implementation plan are:
 
-1. **`crates/bevy-mcp-bridge`** — a Bevy plugin (`BevyMcpPlugin`) that registers two extra BRP
-   methods into the host app's own BRP endpoint.
-2. **The npm package `@cwchanap/bevy-plugin`** — a thin TypeScript stdio passthrough
-   (`src/launcher.ts` + `src/index.ts`, compiled to `build/`) that spawns the upstream binary, plus
-   the Codex/Claude/Agent-Plugins manifests that point every client at that one binary.
+- `docs/superpowers/specs/2026-09-07-owned-bevy-mcp-server-design.md`
+- `docs/superpowers/plans/2026-09-07-owned-bevy-mcp-server.md`
 
-When adding functionality, first check whether upstream already provides it. Do not reimplement a
-BRP client, Cargo discovery, process manager, ECS tool layer, screenshot handling, or a local error
-taxonomy — those were explicitly designed out (see `docs/superpowers/specs/`). The launcher must
-never parse or proxy MCP messages, and must never run `cargo install` on the user's behalf.
+Implementation continues on the same branch/PR as those planning documents. Do not create a second PR for the migration.
+
+The old September 3 design deliberately forbade a local MCP server, BRP client, Cargo discovery, process manager, and ECS tool layer. That decision is superseded. Do **not** use the old design as an implementation constraint.
+
+## Migration target
+
+`@cwchanap/bevy-plugin` becomes the actual MCP stdio server. It will own the complete **47-tool default** Bevy MCP surface locally using:
+
+- `@modelcontextprotocol/server` 2.x for MCP protocol/stdio;
+- TypeScript 5.x and Zod 4;
+- one local BRP JSON-RPC client over localhost HTTP;
+- Cargo metadata/build artifact discovery;
+- in-memory process tracking;
+- one shared `LogStore` for app/watch paths;
+- local polling watches;
+- local type-guide transforms and composites.
+
+The external `bevy_brp_mcp` executable must disappear as a runtime, build, install, subprocess, fallback, and packaging dependency.
+
+`brp_execute` remains a first-class explicit tool but must never be used as a fallback for missing handlers.
+
+## App-side Rust bridge
+
+Keep `crates/bevy-mcp-bridge` and `bevy_brp_extras` as the Bevy application-side integration. Do not reimplement extras in this migration.
+
+`BevyMcpPlugin` continues to:
+
+- add `BrpExtrasPlugin`;
+- register `bevy_mcp/world_stats`;
+- register `bevy_mcp/time_control`;
+- publish those methods through agent-tool metadata.
+
+Those two application methods remain discoverable through `brp_list_agent_tools` and callable through `brp_execute`; they are not additional top-level MCP tools.
+
+Behavioral invariants already pinned by Rust tests remain unchanged:
+
+- `world_stats`: default limit 50, max 500, reject 0, deterministic ordering, `returned` + `truncated`;
+- `time_control`: validate finite positive scale before mutating `Time<Virtual>`.
+
+## Default parity boundary
+
+The migration targets the default upstream catalog, not the optional `mcp-debug` feature. Therefore the owned catalog is 47 tools. Do not add `brp_get_trace_log_path` or `brp_set_tracing_level` in this PR.
+
+The migration may consult pinned upstream commit `85d0ecaed0b4aaebc5ba6d2b54026489e9e5042b` as a behavioral/schema reference only. Never fetch or execute upstream at runtime or in CI.
+
+After the schemas are transcribed, local Zod/JSON-schema snapshots become the maintained contract. Future Bevy/BRP updates are explicit schema/method-table audits.
+
+## Important implementation rules
+
+- One migration PR; review each task commit before the next task.
+- Keep TypeScript on the current 5.x line unless the MCP SDK proves a higher minimum is required.
+- Use one structured MCP result envelope: `{ message, result, metadata? }`.
+- Entity-name lookup uses reflected type `bevy_ecs::name::Name`.
+- `LogStore` alone creates app/watch log paths.
+- Spawned Bevy child processes are tracked and are **not** `unref()`ed.
+- Server cleanup order is watches -> tracked processes -> MCP server close.
+- Cargo builds always run through Cargo and rely on incremental compilation; do not add custom freshness logic.
+- No database, daemon, DI framework, generic tool-codegen framework, remote-host support, WASM relay, or game-specific commands.
+- `brp_all_type_guides` stays in the default parity surface even though it can return a large payload.
+
+## Current transitional state
+
+Until Task 1 of the September 7 plan lands, `src/index.ts`/`src/launcher.ts` still represent the old upstream-delegating implementation. Treat them as code scheduled for deletion, not as the intended architecture.
+
+Likewise, the old September 3 spec/plan and upstream-oriented README/CI instructions are transitional files scheduled for removal/rewrite by the migration plan.
 
 ## Commands
 
+Current commands remain:
+
 ```bash
 cargo fmt --all -- --check
-cargo test --workspace                       # bridge unit tests + fixture build
+cargo test --workspace
 cargo clippy --workspace --all-targets -- -D warnings
-cargo test -p bevy-mcp-bridge <test_name>    # single Rust test
 
 npm ci
-npm run typecheck                            # strict TypeScript check
-npm run build                                # compile src/ -> build/
-npm test                                     # compile + run launcher tests
-npm run smoke:packed                         # npm pack -> install -> run bin against a fake upstream
-npm run test:integration                     # build + full journey; needs a display
+npm run typecheck
+npm run build
+npm test
+npm run smoke:packed
+npm run test:integration
 ```
 
-`npm run test:integration` is the only test that exercises the real path end to end. It requires
-`bevy_brp_mcp` on PATH (or `BEVY_BRP_MCP_BIN`) and a display — on Linux/CI use
-`xvfb-run -a npm run test:integration`. It builds and launches `fixtures/full-app` on port 15702.
+As the migration lands, follow the September 7 implementation plan for added `check:no-upstream`, name-smoke integration, and owned-server E2E gates.
 
-## Architecture
+## Distribution
 
-```
-agent client --stdio--> build/index.js --spawn--> bevy_brp_mcp (upstream)
-                                                   |
-                                               BRP :15702
-                                                   v
-                                    your Bevy app + BevyMcpPlugin
-                                       (BrpExtrasPlugin + 2 methods)
-```
+Keep all client entrypoints resolving to the same npm package:
 
-`BevyMcpPlugin` (`crates/bevy-mcp-bridge/src/lib.rs`) adds `BrpExtrasPlugin`, registers the two
-systems, inserts them into the `RemoteMethods` resource as `RemoteMethodSystemId::Instant`, then
-publishes typed metadata via `register_agent_tool` with params/result JSON schemas.
+- root `plugin.json` + `mcp.json`;
+- `plugins/bevy-plugin/` Codex/Claude manifests;
+- `.claude-plugin/marketplace.json`;
+- `.agents/plugins/marketplace.json`.
 
-**The two methods are not separate MCP tools.** Agents discover them with `brp_list_agent_tools` and
-invoke them via `brp_execute` with `method: "bevy_mcp/world_stats"` / `"bevy_mcp/time_control"`.
-Anything that looks like a new tool in this repo goes through that same route.
+Do not create client-specific MCP implementations.
 
-`methods.rs` separates pure logic from BRP plumbing on purpose: `collect_world_stats(&World, limit)`
-and `apply_time_control(&mut Time<Virtual>, params)` return `Result<_, String>` and are unit-tested
-directly in `crates/bevy-mcp-bridge/tests/methods.rs`; the `world_stats` / `time_control` system
-wrappers only deserialize, delegate, and map errors to `BrpError`. Keep new logic on the pure side.
-
-Behavioral invariants the tests pin down:
-- `world_stats` is bounded — default limit 50, max 500, rejects 0; results carry `returned` and
-  `truncated`, sorted by count desc then name asc.
-- `world_stats` counts the **entity** domain only: empty archetypes and the resource archetype
-  (identified by the `IsResource` component id) are filtered out, so `archetypes` is smaller than
-  `World::archetypes().len()`.
-- `time_control` validates scale (finite, > 0) *before* mutating `Time<Virtual>`.
-
-## Version pins (change these together)
-
-- **`bevy_brp_mcp` / `bevy_brp_extras` 0.22.3** appears in `crates/bevy-mcp-bridge/Cargo.toml`,
-  `PREREQUISITE_COMMAND` in `src/launcher.ts`, the assertion in `test/launcher.test.ts`, the CI
-  `cargo install` step, and the README. The upstream and extras versions must match.
-- **Bevy 0.19.1** — the bridge depends on focused subcrates (`bevy_app`, `bevy_ecs`, `bevy_remote`,
-  `bevy_time`), never the umbrella `bevy` crate. The fixture uses the umbrella crate with `png`.
-- **npm package version** is duplicated in `package.json`, `plugin.json`, `mcp.json`,
-  `plugins/bevy-plugin/.mcp.json`, `plugins/bevy-plugin/.claude-plugin/plugin.json`, and
-  `plugins/bevy-plugin/.codex-plugin/plugin.json` (the latter two also pin `@0.1.0` in the npx args).
-  A release bump must touch all of them.
-
-## Distribution layout
-
-- `plugins/bevy-plugin/` — Claude Code and Codex plugin manifests, both delegating to `./.mcp.json`.
-- `plugin.json` + `mcp.json` at the repo root — the portable Agent Plugins 1.0 package (this is the
-  Pi path, via `pi-mcp-adapter` + `pi-agent-plugins`).
-- `.claude-plugin/marketplace.json` and `.agents/plugins/marketplace.json` — marketplace entries
-  pointing at `./plugins/bevy-plugin`.
-
-All entrypoints resolve to the same npm package; keep them consistent rather than adding a
-client-specific code path.
-
-## Publishing
-
-`.github/workflows/ci.yml` gates `npm publish --access public` behind the rust, node, and
-integration jobs, triggered by a GitHub release or a `workflow_dispatch` with
-`trigger_publish=true`. `crates/bevy-mcp-bridge` is `publish = false` — consumers add it by git URL.
+`crates/bevy-mcp-bridge` remains `publish = false`; consumers use the git dependency. npm publication remains gated by Rust, Node, and real integration CI.
