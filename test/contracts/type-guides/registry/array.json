@@ -1,0 +1,11 @@
+{
+  "shortPath": "[Vec3; 2]",
+  "typePath": "[glam::Vec3; 2]",
+  "kind": "Array",
+  "type": "array",
+  "items": {
+    "type": {
+      "$ref": "#/$defs/glam::Vec3"
+    }
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "shortPath": "i8",
+  "typePath": "i8",
+  "reflectTypes": [
+    "Serialize",
+    "Default",
+    "Deserialize"
+  ],
+  "kind": "Value",
+  "type": "int"
+}

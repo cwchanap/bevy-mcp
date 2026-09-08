@@ -1,0 +1,11 @@
+{
+  "shortPath": "f64",
+  "typePath": "f64",
+  "reflectTypes": [
+    "Serialize",
+    "Default",
+    "Deserialize"
+  ],
+  "kind": "Value",
+  "type": "float"
+}

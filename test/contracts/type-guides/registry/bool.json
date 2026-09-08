@@ -1,0 +1,11 @@
+{
+  "shortPath": "bool",
+  "typePath": "bool",
+  "reflectTypes": [
+    "Serialize",
+    "Default",
+    "Deserialize"
+  ],
+  "kind": "Value",
+  "type": "boolean"
+}

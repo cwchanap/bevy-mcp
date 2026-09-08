@@ -1,0 +1,42 @@
+{
+  "shortPath": "Quat",
+  "typePath": "glam::Quat",
+  "modulePath": "glam",
+  "crateName": "glam",
+  "reflectTypes": [
+    "Serialize",
+    "Default",
+    "Deserialize"
+  ],
+  "kind": "Struct",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "y": {
+      "type": {
+        "$ref": "#/$defs/f32"
+      }
+    },
+    "x": {
+      "type": {
+        "$ref": "#/$defs/f32"
+      }
+    },
+    "w": {
+      "type": {
+        "$ref": "#/$defs/f32"
+      }
+    },
+    "z": {
+      "type": {
+        "$ref": "#/$defs/f32"
+      }
+    }
+  },
+  "required": [
+    "x",
+    "y",
+    "z",
+    "w"
+  ]
+}

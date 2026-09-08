@@ -1,0 +1,27 @@
+{
+  "shortPath": "FixtureValue",
+  "typePath": "bevy_mcp_fixture::FixtureValue",
+  "modulePath": "bevy_mcp_fixture",
+  "crateName": "bevy_mcp_fixture",
+  "reflectTypes": [
+    "Component"
+  ],
+  "kind": "Struct",
+  "type": "object",
+  "additionalProperties": false,
+  "componentInfo": {
+    "mutable": true,
+    "storageType": "Table",
+    "isSendAndSync": true
+  },
+  "properties": {
+    "value": {
+      "type": {
+        "$ref": "#/$defs/i32"
+      }
+    }
+  },
+  "required": [
+    "value"
+  ]
+}

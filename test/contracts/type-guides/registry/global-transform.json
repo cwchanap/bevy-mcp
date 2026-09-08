@@ -1,0 +1,27 @@
+{
+  "shortPath": "GlobalTransform",
+  "typePath": "bevy_transform::components::global_transform::GlobalTransform",
+  "modulePath": "bevy_transform::components::global_transform",
+  "crateName": "bevy_transform",
+  "reflectTypes": [
+    "Serialize",
+    "Default",
+    "Component",
+    "Deserialize"
+  ],
+  "kind": "TupleStruct",
+  "type": "array",
+  "componentInfo": {
+    "mutable": true,
+    "storageType": "Table",
+    "isSendAndSync": true
+  },
+  "prefixItems": [
+    {
+      "type": {
+        "$ref": "#/$defs/glam::Affine3A"
+      }
+    }
+  ],
+  "items": false
+}

@@ -1,0 +1,27 @@
+{
+  "shortPath": "Name",
+  "typePath": "bevy_ecs::name::Name",
+  "modulePath": "bevy_ecs::name",
+  "crateName": "bevy_ecs",
+  "reflectTypes": [
+    "Serialize",
+    "Default",
+    "Component",
+    "Deserialize"
+  ],
+  "kind": "TupleStruct",
+  "type": "array",
+  "componentInfo": {
+    "mutable": true,
+    "storageType": "Table",
+    "isSendAndSync": true
+  },
+  "prefixItems": [
+    {
+      "type": {
+        "$ref": "#/$defs/bevy_ecs::name::HashedStr"
+      }
+    }
+  ],
+  "items": false
+}

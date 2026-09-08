@@ -1,0 +1,27 @@
+{
+  "shortPath": "ChildOf",
+  "typePath": "bevy_ecs::hierarchy::ChildOf",
+  "modulePath": "bevy_ecs::hierarchy",
+  "crateName": "bevy_ecs",
+  "reflectTypes": [
+    "Serialize",
+    "Component",
+    "Deserialize"
+  ],
+  "kind": "TupleStruct",
+  "type": "array",
+  "componentInfo": {
+    "mutable": false,
+    "storageType": "Table",
+    "isSendAndSync": true,
+    "relationshipKind": "Relationship"
+  },
+  "prefixItems": [
+    {
+      "type": {
+        "$ref": "#/$defs/bevy_ecs::entity::Entity"
+      }
+    }
+  ],
+  "items": false
+}

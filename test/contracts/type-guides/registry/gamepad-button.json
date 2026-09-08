@@ -1,0 +1,104 @@
+{
+  "shortPath": "GamepadButton",
+  "typePath": "bevy_input::gamepad::GamepadButton",
+  "modulePath": "bevy_input::gamepad",
+  "crateName": "bevy_input",
+  "reflectTypes": [
+    "Serialize",
+    "Deserialize"
+  ],
+  "kind": "Enum",
+  "type": "object",
+  "oneOf": [
+    {
+      "typePath": "bevy_input::gamepad::GamepadButton::South",
+      "shortPath": "South"
+    },
+    {
+      "typePath": "bevy_input::gamepad::GamepadButton::East",
+      "shortPath": "East"
+    },
+    {
+      "typePath": "bevy_input::gamepad::GamepadButton::North",
+      "shortPath": "North"
+    },
+    {
+      "typePath": "bevy_input::gamepad::GamepadButton::West",
+      "shortPath": "West"
+    },
+    {
+      "typePath": "bevy_input::gamepad::GamepadButton::C",
+      "shortPath": "C"
+    },
+    {
+      "typePath": "bevy_input::gamepad::GamepadButton::Z",
+      "shortPath": "Z"
+    },
+    {
+      "typePath": "bevy_input::gamepad::GamepadButton::LeftTrigger",
+      "shortPath": "LeftTrigger"
+    },
+    {
+      "typePath": "bevy_input::gamepad::GamepadButton::LeftTrigger2",
+      "shortPath": "LeftTrigger2"
+    },
+    {
+      "typePath": "bevy_input::gamepad::GamepadButton::RightTrigger",
+      "shortPath": "RightTrigger"
+    },
+    {
+      "typePath": "bevy_input::gamepad::GamepadButton::RightTrigger2",
+      "shortPath": "RightTrigger2"
+    },
+    {
+      "typePath": "bevy_input::gamepad::GamepadButton::Select",
+      "shortPath": "Select"
+    },
+    {
+      "typePath": "bevy_input::gamepad::GamepadButton::Start",
+      "shortPath": "Start"
+    },
+    {
+      "typePath": "bevy_input::gamepad::GamepadButton::Mode",
+      "shortPath": "Mode"
+    },
+    {
+      "typePath": "bevy_input::gamepad::GamepadButton::LeftThumb",
+      "shortPath": "LeftThumb"
+    },
+    {
+      "typePath": "bevy_input::gamepad::GamepadButton::RightThumb",
+      "shortPath": "RightThumb"
+    },
+    {
+      "typePath": "bevy_input::gamepad::GamepadButton::DPadUp",
+      "shortPath": "DPadUp"
+    },
+    {
+      "typePath": "bevy_input::gamepad::GamepadButton::DPadDown",
+      "shortPath": "DPadDown"
+    },
+    {
+      "typePath": "bevy_input::gamepad::GamepadButton::DPadLeft",
+      "shortPath": "DPadLeft"
+    },
+    {
+      "typePath": "bevy_input::gamepad::GamepadButton::DPadRight",
+      "shortPath": "DPadRight"
+    },
+    {
+      "type": "array",
+      "kind": "Tuple",
+      "typePath": "bevy_input::gamepad::GamepadButton::Other",
+      "shortPath": "Other",
+      "prefixItems": [
+        {
+          "type": {
+            "$ref": "#/$defs/u8"
+          }
+        }
+      ],
+      "items": false
+    }
+  ]
+}

@@ -1,0 +1,13 @@
+{
+  "shortPath": "String",
+  "typePath": "alloc::string::String",
+  "modulePath": "alloc::string",
+  "crateName": "alloc",
+  "reflectTypes": [
+    "Serialize",
+    "Default",
+    "Deserialize"
+  ],
+  "kind": "Value",
+  "type": "string"
+}
