@@ -9,6 +9,8 @@
   },
   "files": [
     "build",
+    "contracts",
+    "THIRD_PARTY_NOTICES.md",
     "plugin.json",
     "mcp.json"
   ],
@@ -28,5 +30,8 @@
     "@modelcontextprotocol/client": "^2.0.0",
     "@types/node": "^20.11.24",
     "typescript": "^5.3.3"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/server": "^2.0.0"
   }
 }
