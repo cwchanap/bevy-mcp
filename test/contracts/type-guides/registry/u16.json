@@ -1,0 +1,11 @@
+{
+  "shortPath": "u16",
+  "typePath": "u16",
+  "reflectTypes": [
+    "Serialize",
+    "Default",
+    "Deserialize"
+  ],
+  "kind": "Value",
+  "type": "uint"
+}

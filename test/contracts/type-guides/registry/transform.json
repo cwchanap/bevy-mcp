@@ -1,0 +1,46 @@
+{
+  "shortPath": "Transform",
+  "typePath": "bevy_transform::components::transform::Transform",
+  "modulePath": "bevy_transform::components::transform",
+  "crateName": "bevy_transform",
+  "reflectTypes": [
+    "Serialize",
+    "Default",
+    "Component",
+    "Deserialize"
+  ],
+  "kind": "Struct",
+  "type": "object",
+  "additionalProperties": false,
+  "componentInfo": {
+    "mutable": true,
+    "storageType": "Table",
+    "isSendAndSync": true,
+    "requiredComponentTypes": [
+      "bevy_transform::components::global_transform::GlobalTransform",
+      "bevy_transform::components::transform::TransformTreeChanged"
+    ]
+  },
+  "properties": {
+    "rotation": {
+      "type": {
+        "$ref": "#/$defs/glam::Quat"
+      }
+    },
+    "scale": {
+      "type": {
+        "$ref": "#/$defs/glam::Vec3"
+      }
+    },
+    "translation": {
+      "type": {
+        "$ref": "#/$defs/glam::Vec3"
+      }
+    }
+  },
+  "required": [
+    "translation",
+    "rotation",
+    "scale"
+  ]
+}

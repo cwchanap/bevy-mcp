@@ -1,0 +1,28 @@
+{
+  "shortPath": "Option<String>",
+  "typePath": "core::option::Option<alloc::string::String>",
+  "modulePath": "core::option",
+  "crateName": "core",
+  "kind": "Enum",
+  "type": "object",
+  "oneOf": [
+    {
+      "typePath": "core::option::Option<alloc::string::String>::None",
+      "shortPath": "None"
+    },
+    {
+      "type": "array",
+      "kind": "Tuple",
+      "typePath": "core::option::Option<alloc::string::String>::Some",
+      "shortPath": "Some",
+      "prefixItems": [
+        {
+          "type": {
+            "$ref": "#/$defs/alloc::string::String"
+          }
+        }
+      ],
+      "items": false
+    }
+  ]
+}

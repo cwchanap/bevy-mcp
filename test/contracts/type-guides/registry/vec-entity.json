@@ -1,0 +1,13 @@
+{
+  "shortPath": "Vec<Entity>",
+  "typePath": "alloc::vec::Vec<bevy_ecs::entity::Entity>",
+  "modulePath": "alloc::vec",
+  "crateName": "alloc",
+  "kind": "List",
+  "type": "array",
+  "items": {
+    "type": {
+      "$ref": "#/$defs/bevy_ecs::entity::Entity"
+    }
+  }
+}

@@ -1,0 +1,30 @@
+{
+  "shortPath": "Affine3A",
+  "typePath": "glam::Affine3A",
+  "modulePath": "glam",
+  "crateName": "glam",
+  "reflectTypes": [
+    "Serialize",
+    "Default",
+    "Deserialize"
+  ],
+  "kind": "Struct",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "translation": {
+      "type": {
+        "$ref": "#/$defs/glam::Vec3A"
+      }
+    },
+    "matrix3": {
+      "type": {
+        "$ref": "#/$defs/glam::Mat3A"
+      }
+    }
+  },
+  "required": [
+    "matrix3",
+    "translation"
+  ]
+}

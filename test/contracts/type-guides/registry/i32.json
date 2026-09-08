@@ -1,0 +1,11 @@
+{
+  "shortPath": "i32",
+  "typePath": "i32",
+  "reflectTypes": [
+    "Serialize",
+    "Default",
+    "Deserialize"
+  ],
+  "kind": "Value",
+  "type": "int"
+}

@@ -1,0 +1,11 @@
+{
+  "shortPath": "char",
+  "typePath": "char",
+  "reflectTypes": [
+    "Serialize",
+    "Default",
+    "Deserialize"
+  ],
+  "kind": "Value",
+  "type": "string"
+}

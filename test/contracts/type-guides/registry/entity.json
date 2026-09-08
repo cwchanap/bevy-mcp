@@ -1,0 +1,12 @@
+{
+  "shortPath": "Entity",
+  "typePath": "bevy_ecs::entity::Entity",
+  "modulePath": "bevy_ecs::entity",
+  "crateName": "bevy_ecs",
+  "reflectTypes": [
+    "Serialize",
+    "Deserialize"
+  ],
+  "kind": "Value",
+  "type": "object"
+}

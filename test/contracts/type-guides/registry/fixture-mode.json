@@ -1,0 +1,40 @@
+{
+  "shortPath": "FixtureMode",
+  "typePath": "bevy_mcp_fixture::FixtureMode",
+  "modulePath": "bevy_mcp_fixture",
+  "crateName": "bevy_mcp_fixture",
+  "reflectTypes": [
+    "Component"
+  ],
+  "kind": "Enum",
+  "type": "object",
+  "componentInfo": {
+    "mutable": true,
+    "storageType": "Table",
+    "isSendAndSync": true
+  },
+  "oneOf": [
+    {
+      "typePath": "bevy_mcp_fixture::FixtureMode::Idle",
+      "shortPath": "Idle"
+    },
+    {
+      "type": "object",
+      "kind": "Struct",
+      "typePath": "bevy_mcp_fixture::FixtureMode::Moving",
+      "shortPath": "Moving",
+      "properties": {
+        "speed": {
+          "type": {
+            "$ref": "#/$defs/f32"
+          },
+          "typePath": "speed"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "speed"
+      ]
+    }
+  ]
+}

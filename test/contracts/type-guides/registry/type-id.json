@@ -1,0 +1,8 @@
+{
+  "shortPath": "TypeId",
+  "typePath": "core::any::TypeId",
+  "modulePath": "core::any",
+  "crateName": "core",
+  "kind": "Value",
+  "type": "object"
+}

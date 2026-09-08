@@ -1,0 +1,13 @@
+{
+  "shortPath": "HashSet<GamepadButton, FixedHasher>",
+  "typePath": "bevy_platform::collections::HashSet<bevy_input::gamepad::GamepadButton, bevy_platform::hash::FixedHasher>",
+  "modulePath": "bevy_platform::collections",
+  "crateName": "bevy_platform",
+  "kind": "Set",
+  "type": "set",
+  "items": {
+    "type": {
+      "$ref": "#/$defs/bevy_input::gamepad::GamepadButton"
+    }
+  }
+}

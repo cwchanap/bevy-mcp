@@ -1,0 +1,18 @@
+{
+  "shortPath": "HashMap<TypeId, String, FixedHasher>",
+  "typePath": "bevy_platform::collections::HashMap<core::any::TypeId, alloc::string::String, bevy_platform::hash::FixedHasher>",
+  "modulePath": "bevy_platform::collections",
+  "crateName": "bevy_platform",
+  "kind": "Map",
+  "keyType": {
+    "type": {
+      "$ref": "#/$defs/core::any::TypeId"
+    }
+  },
+  "valueType": {
+    "type": {
+      "$ref": "#/$defs/alloc::string::String"
+    }
+  },
+  "type": "object"
+}

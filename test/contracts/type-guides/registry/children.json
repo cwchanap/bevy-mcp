@@ -1,0 +1,26 @@
+{
+  "shortPath": "Children",
+  "typePath": "bevy_ecs::hierarchy::Children",
+  "modulePath": "bevy_ecs::hierarchy",
+  "crateName": "bevy_ecs",
+  "reflectTypes": [
+    "Default",
+    "Component"
+  ],
+  "kind": "TupleStruct",
+  "type": "array",
+  "componentInfo": {
+    "mutable": true,
+    "storageType": "Table",
+    "isSendAndSync": true,
+    "relationshipKind": "RelationshipTarget"
+  },
+  "prefixItems": [
+    {
+      "type": {
+        "$ref": "#/$defs/alloc::vec::Vec<bevy_ecs::entity::Entity>"
+      }
+    }
+  ],
+  "items": false
+}

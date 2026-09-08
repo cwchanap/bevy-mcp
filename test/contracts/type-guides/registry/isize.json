@@ -1,0 +1,11 @@
+{
+  "shortPath": "isize",
+  "typePath": "isize",
+  "reflectTypes": [
+    "Serialize",
+    "Default",
+    "Deserialize"
+  ],
+  "kind": "Value",
+  "type": "int"
+}

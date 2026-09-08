@@ -1,0 +1,36 @@
+{
+  "shortPath": "Mat3A",
+  "typePath": "glam::Mat3A",
+  "modulePath": "glam",
+  "crateName": "glam",
+  "reflectTypes": [
+    "Serialize",
+    "Default",
+    "Deserialize"
+  ],
+  "kind": "Struct",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "x_axis": {
+      "type": {
+        "$ref": "#/$defs/glam::Vec3A"
+      }
+    },
+    "y_axis": {
+      "type": {
+        "$ref": "#/$defs/glam::Vec3A"
+      }
+    },
+    "z_axis": {
+      "type": {
+        "$ref": "#/$defs/glam::Vec3A"
+      }
+    }
+  },
+  "required": [
+    "x_axis",
+    "y_axis",
+    "z_axis"
+  ]
+}
