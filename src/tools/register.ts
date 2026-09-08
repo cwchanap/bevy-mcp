@@ -4,12 +4,14 @@ import {
   type McpServer,
 } from '@modelcontextprotocol/server';
 import { DEFAULT_BRP_PORT } from '../brp/client.js';
-import { BrpError, BrpHttpError, BrpJsonRpcError } from '../brp/errors.js';
+import { BrpError } from '../brp/errors.js';
 import { overrideDescription, type ToolContractCatalog } from '../tool-contracts.js';
 import type { BevyMcpServices } from '../services.js';
-import { toolError, toolSuccess, type CallInfo } from './response.js';
+import { toolError, toolSuccess, brpErrorInfo, type CallInfo } from './response.js';
 import { RESOURCE_DIRECT } from './resources.js';
 import { WORLD_DIRECT } from './world.js';
+import { findEntitiesByNameHandler } from './discovery.js';
+import { executeHandler, listAgentToolsHandler } from './agent-tools.js';
 
 /** Handler for an owned tool: receives the raw MCP call arguments. */
 export type OwnedToolHandler = (args: Record<string, unknown>) => Promise<CallToolResult>;
@@ -38,19 +40,6 @@ export function registerOwnedTool(
     },
     (args) => handler(args as Record<string, unknown>),
   );
-}
-
-/** Structured `error_info` payload derived from the typed BRP error. */
-function brpErrorInfo(error: BrpError): Record<string, unknown> {
-  if (error instanceof BrpJsonRpcError) {
-    const info: Record<string, unknown> = { code: error.code, message: error.message };
-    if (error.data !== undefined) info.data = error.data;
-    return info;
-  }
-  if (error instanceof BrpHttpError) {
-    return { http_status: error.status, message: error.message };
-  }
-  return { message: error.message };
 }
 
 /**
@@ -101,4 +90,19 @@ export function registerDirectTools(
   for (const [name, method] of Object.entries({ ...WORLD_DIRECT, ...RESOURCE_DIRECT })) {
     registerDirectBrpTool(server, services, catalog, { name, method });
   }
+}
+
+/**
+ * Register the three composite/discovery tools: the MCP-local name lookup,
+ * the discovery-gated `brp_execute`, and the agent-tool catalog listing.
+ * Each is registered exactly once here; no other handler may call them.
+ */
+export function registerDiscoveryTools(
+  server: McpServer,
+  services: BevyMcpServices,
+  catalog: ToolContractCatalog,
+): void {
+  registerOwnedTool(server, catalog, 'world_find_entities_by_name', findEntitiesByNameHandler(services));
+  registerOwnedTool(server, catalog, 'brp_execute', executeHandler(services));
+  registerOwnedTool(server, catalog, 'brp_list_agent_tools', listAgentToolsHandler(services));
 }

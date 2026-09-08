@@ -114,12 +114,12 @@ test('all direct tools advertise their captured contract over a real tools/list'
   }
 });
 
-test('the owned server registers only contract tools (zero for now)', () => {
+test('the owned server registers exactly the 20 implemented contract tools', () => {
   const catalog = loadToolContractCatalog();
   const { server } = createOwnedServer();
   const knownNames = new Set(catalog.names());
   for (const name of Object.keys(registeredTools(server))) {
     assert.ok(knownNames.has(name), `non-contract tool registered: ${name}`);
   }
-  assert.equal(Object.keys(registeredTools(server)).length, 0);
+  assert.equal(Object.keys(registeredTools(server)).length, 20);
 });

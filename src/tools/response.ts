@@ -1,4 +1,5 @@
 import type { CallToolResult } from '@modelcontextprotocol/server';
+import { BrpError, BrpHttpError, BrpJsonRpcError } from '../brp/errors.js';
 
 export type ResponseStatus = 'success' | 'error';
 
@@ -25,6 +26,19 @@ export interface ToolResponseExtras {
   result?: unknown;
   error_info?: unknown;
   brp_extras_debug_info?: unknown;
+}
+
+/** Structured `error_info` payload derived from the typed BRP error. */
+export function brpErrorInfo(error: BrpError): Record<string, unknown> {
+  if (error instanceof BrpJsonRpcError) {
+    const info: Record<string, unknown> = { code: error.code, message: error.message };
+    if (error.data !== undefined) info.data = error.data;
+    return info;
+  }
+  if (error instanceof BrpHttpError) {
+    return { http_status: error.status, message: error.message };
+  }
+  return { message: error.message };
 }
 
 /** The envelope fields that are only emitted when present. */
