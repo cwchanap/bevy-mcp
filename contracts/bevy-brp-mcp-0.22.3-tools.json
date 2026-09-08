@@ -1,0 +1,4659 @@
+{
+  "source": {
+    "version": "0.22.3",
+    "commit": "85d0ecaed0b4aaebc5ba6d2b54026489e9e5042b"
+  },
+  "tools": [
+    {
+      "name": "brp_all_type_guides",
+      "title": "get type guides for all registered types",
+      "description": "Get type guides for all registered Components and Resources in a running Bevy application.\n\nsee `mcp__brp__brp_type_guide` for details about type guides.\n",
+      "annotations": {
+        "title": "Discovery: get type guides for all registered types",
+        "readOnlyHint": true,
+        "openWorldHint": false
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "port": {
+            "type": "number",
+            "description": "Port number for BRP - defaults to 15702"
+          }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "description": "Response status types",
+            "type": "string",
+            "enum": [
+              "success",
+              "error"
+            ]
+          },
+          "message": {
+            "type": "string"
+          },
+          "call_info": {
+            "description": "Call information for tracking tool execution",
+            "anyOf": [
+              {
+                "description": "Local tool execution (no BRP involved)",
+                "type": "object",
+                "properties": {
+                  "mcp_tool": {
+                    "description": "The MCP tool name (e.g., `brp_status`)",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "mcp_tool"
+                ]
+              },
+              {
+                "description": "BRP tool execution (calls Bevy Remote Protocol)",
+                "type": "object",
+                "properties": {
+                  "mcp_tool": {
+                    "description": "The MCP tool name (e.g., `world_spawn_entity`)",
+                    "type": "string"
+                  },
+                  "brp_method": {
+                    "description": "The BRP method name (e.g., `world.spawn_entity`)",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "mcp_tool",
+                  "brp_method"
+                ]
+              }
+            ]
+          },
+          "metadata": {},
+          "parameters": {},
+          "result": {},
+          "error_info": {},
+          "brp_extras_debug_info": {}
+        },
+        "required": [
+          "status",
+          "message",
+          "call_info"
+        ],
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "ToolCallJsonResponse",
+        "description": "Standard JSON response structure for all tools"
+      }
+    },
+    {
+      "name": "brp_delete_logs",
+      "title": "delete log files",
+      "description": "Deletes bevy_brp_mcp log files from temp directory with optional filters.\n\nReturns: Count of deleted files.\n\nNote: Use list_logs first to preview. Only bevy_brp_mcp logs can be deleted for safety.\n\nNote: Currently watch logs cannot be deleted exclusively. You can delete _all_ logs including watch logs by not specifying app_name or older_than_seconds. You can also delete all logs older than a certain age by specifying older_than_seconds.\n",
+      "annotations": {
+        "title": "Logging: delete log files",
+        "readOnlyHint": false,
+        "destructiveHint": true,
+        "idempotentHint": true,
+        "openWorldHint": false
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "app_name": {
+            "type": "string",
+            "description": "Optional filter to delete logs for a specific app only"
+          },
+          "older_than_seconds": {
+            "type": "number",
+            "description": "Optional filter to delete logs older than N seconds"
+          }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "description": "Response status types",
+            "type": "string",
+            "enum": [
+              "success",
+              "error"
+            ]
+          },
+          "message": {
+            "type": "string"
+          },
+          "call_info": {
+            "description": "Call information for tracking tool execution",
+            "anyOf": [
+              {
+                "description": "Local tool execution (no BRP involved)",
+                "type": "object",
+                "properties": {
+                  "mcp_tool": {
+                    "description": "The MCP tool name (e.g., `brp_status`)",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "mcp_tool"
+                ]
+              },
+              {
+                "description": "BRP tool execution (calls Bevy Remote Protocol)",
+                "type": "object",
+                "properties": {
+                  "mcp_tool": {
+                    "description": "The MCP tool name (e.g., `world_spawn_entity`)",
+                    "type": "string"
+                  },
+                  "brp_method": {
+                    "description": "The BRP method name (e.g., `world.spawn_entity`)",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "mcp_tool",
+                  "brp_method"
+                ]
+              }
+            ]
+          },
+          "metadata": {},
+          "parameters": {},
+          "result": {},
+          "error_info": {},
+          "brp_extras_debug_info": {}
+        },
+        "required": [
+          "status",
+          "message",
+          "call_info"
+        ],
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "ToolCallJsonResponse",
+        "description": "Standard JSON response structure for all tools"
+      }
+    },
+    {
+      "name": "brp_execute",
+      "title": "execute brp method",
+      "description": "Execute any BRP method registered on a running Bevy app.\n\nThe tool calls rpc.discover on the selected port, requires an exact method-name match, then forwards\nthe caller-supplied params as raw JSON. Use brp_list_agent_tools first when the application publishes\ncurated descriptions and raw parameter/result schemas, and follow its result.usage guidance.\n\nFor MCP invocation, use brp_execute for discovery validation, timeout handling, and BRP error\ndetails. Direct HTTP JSON-RPC is a developer-only alternative outside MCP.\n",
+      "annotations": {
+        "title": "Dynamic BRP: execute brp method",
+        "readOnlyHint": false,
+        "destructiveHint": true,
+        "idempotentHint": false,
+        "openWorldHint": false
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "method": {
+            "type": "string",
+            "description": "The BRP method to execute (e.g., `rpc.discover`, `world.get_components`, `world.query`)"
+          },
+          "params": {
+            "anyOf": [
+              {
+                "type": "object"
+              },
+              {
+                "type": "array",
+                "items": {}
+              },
+              {
+                "type": "string"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Optional parameters for the method"
+          },
+          "port": {
+            "type": "number",
+            "description": "Port number for BRP - defaults to 15702"
+          }
+        },
+        "required": [
+          "method"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "description": "Response status types",
+            "type": "string",
+            "enum": [
+              "success",
+              "error"
+            ]
+          },
+          "message": {
+            "type": "string"
+          },
+          "call_info": {
+            "description": "Call information for tracking tool execution",
+            "anyOf": [
+              {
+                "description": "Local tool execution (no BRP involved)",
+                "type": "object",
+                "properties": {
+                  "mcp_tool": {
+                    "description": "The MCP tool name (e.g., `brp_status`)",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "mcp_tool"
+                ]
+              },
+              {
+                "description": "BRP tool execution (calls Bevy Remote Protocol)",
+                "type": "object",
+                "properties": {
+                  "mcp_tool": {
+                    "description": "The MCP tool name (e.g., `world_spawn_entity`)",
+                    "type": "string"
+                  },
+                  "brp_method": {
+                    "description": "The BRP method name (e.g., `world.spawn_entity`)",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "mcp_tool",
+                  "brp_method"
+                ]
+              }
+            ]
+          },
+          "metadata": {},
+          "parameters": {},
+          "result": {},
+          "error_info": {},
+          "brp_extras_debug_info": {}
+        },
+        "required": [
+          "status",
+          "message",
+          "call_info"
+        ],
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "ToolCallJsonResponse",
+        "description": "Standard JSON response structure for all tools"
+      }
+    },
+    {
+      "name": "brp_extras_click_mouse",
+      "title": "click mouse button",
+      "description": "Clicks a mouse button in Bevy apps via bevy_brp_extras. Performs a simple click (press and immediate release) with default 100ms timing.\n\nButton options: Left, Right, Middle, Back, Forward\n\nExamples:\n```json\n{\"button\": \"Left\"}              // Click left button\n{\"button\": \"Right\"}             // Click right button\n{\"button\": \"Middle\"}            // Click middle button (wheel)\n```\n\nPrerequisites: bevy_brp_extras dependency and BrpExtrasPlugin registered.\n",
+      "annotations": {
+        "title": "Extras: click mouse button",
+        "readOnlyHint": false,
+        "destructiveHint": true,
+        "idempotentHint": false,
+        "openWorldHint": false
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "button": {
+            "type": "string",
+            "description": "Mouse button for BRP operations"
+          },
+          "window": {
+            "type": "number",
+            "description": "Optional window entity ID to target (defaults to primary window)"
+          },
+          "port": {
+            "type": "number",
+            "description": "Port number for BRP - defaults to 15702"
+          }
+        },
+        "required": [
+          "button"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "description": "Response status types",
+            "type": "string",
+            "enum": [
+              "success",
+              "error"
+            ]
+          },
+          "message": {
+            "type": "string"
+          },
+          "call_info": {
+            "description": "Call information for tracking tool execution",
+            "anyOf": [
+              {
+                "description": "Local tool execution (no BRP involved)",
+                "type": "object",
+                "properties": {
+                  "mcp_tool": {
+                    "description": "The MCP tool name (e.g., `brp_status`)",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "mcp_tool"
+                ]
+              },
+              {
+                "description": "BRP tool execution (calls Bevy Remote Protocol)",
+                "type": "object",
+                "properties": {
+                  "mcp_tool": {
+                    "description": "The MCP tool name (e.g., `world_spawn_entity`)",
+                    "type": "string"
+                  },
+                  "brp_method": {
+                    "description": "The BRP method name (e.g., `world.spawn_entity`)",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "mcp_tool",
+                  "brp_method"
+                ]
+              }
+            ]
+          },
+          "metadata": {},
+          "parameters": {},
+          "result": {},
+          "error_info": {},
+          "brp_extras_debug_info": {}
+        },
+        "required": [
+          "status",
+          "message",
+          "call_info"
+        ],
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "ToolCallJsonResponse",
+        "description": "Standard JSON response structure for all tools"
+      }
+    },
+    {
+      "name": "brp_extras_double_click_mouse",
+      "title": "double click mouse",
+      "description": "Performs a double click with specified mouse button via bevy_brp_extras. Executes two rapid clicks with configurable delay between them.\n\nButton options: Left, Right, Middle, Back, Forward\n\nExamples:\n```json\n{\"button\": \"Left\"}                     // Standard double click (250ms delay)\n{\"button\": \"Left\", \"delay_ms\": 50}     // Fast double click (50ms delay)\n{\"button\": \"Right\", \"delay_ms\": 200}   // Slow double click (200ms delay)\n```\n\nPrerequisites: bevy_brp_extras dependency and BrpExtrasPlugin registered.\n",
+      "annotations": {
+        "title": "Extras: double click mouse",
+        "readOnlyHint": false,
+        "destructiveHint": true,
+        "idempotentHint": false,
+        "openWorldHint": false
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "button": {
+            "type": "string",
+            "description": "Mouse button for BRP operations"
+          },
+          "delay_ms": {
+            "type": "number",
+            "description": "Delay in milliseconds between clicks (default: 250ms)"
+          },
+          "window": {
+            "type": "number",
+            "description": "Optional window entity ID to target (defaults to primary window)"
+          },
+          "port": {
+            "type": "number",
+            "description": "Port number for BRP - defaults to 15702"
+          }
+        },
+        "required": [
+          "button"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "description": "Response status types",
+            "type": "string",
+            "enum": [
+              "success",
+              "error"
+            ]
+          },
+          "message": {
+            "type": "string"
+          },
+          "call_info": {
+            "description": "Call information for tracking tool execution",
+            "anyOf": [
+              {
+                "description": "Local tool execution (no BRP involved)",
+                "type": "object",
+                "properties": {
+                  "mcp_tool": {
+                    "description": "The MCP tool name (e.g., `brp_status`)",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "mcp_tool"
+                ]
+              },
+              {
+                "description": "BRP tool execution (calls Bevy Remote Protocol)",
+                "type": "object",
+                "properties": {
+                  "mcp_tool": {
+                    "description": "The MCP tool name (e.g., `world_spawn_entity`)",
+                    "type": "string"
+                  },
+                  "brp_method": {
+                    "description": "The BRP method name (e.g., `world.spawn_entity`)",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "mcp_tool",
+                  "brp_method"
+                ]
+              }
+            ]
+          },
+          "metadata": {},
+          "parameters": {},
+          "result": {},
+          "error_info": {},
+          "brp_extras_debug_info": {}
+        },
+        "required": [
+          "status",
+          "message",
+          "call_info"
+        ],
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "ToolCallJsonResponse",
+        "description": "Standard JSON response structure for all tools"
+      }
+    },
+    {
+      "name": "brp_extras_double_tap_gesture",
+      "title": "double tap gesture",
+      "description": "Sends double tap gesture events to Bevy apps via bevy_brp_extras. Simulates trackpad double tap gestures.\n\nPlatform: macOS trackpad gestures (may not be supported on all platforms)\n\nExample:\n```json\n{}  // No parameters required - sends double tap gesture\n```\n\nPrerequisites: bevy_brp_extras dependency and BrpExtrasPlugin registered.\n",
+      "annotations": {
+        "title": "Extras: double tap gesture",
+        "readOnlyHint": false,
+        "destructiveHint": true,
+        "idempotentHint": false,
+        "openWorldHint": false
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "port": {
+            "type": "number",
+            "description": "Port number for BRP - defaults to 15702"
+          }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "description": "Response status types",
+            "type": "string",
+            "enum": [
+              "success",
+              "error"
+            ]
+          },
+          "message": {
+            "type": "string"
+          },
+          "call_info": {
+            "description": "Call information for tracking tool execution",
+            "anyOf": [
+              {
+                "description": "Local tool execution (no BRP involved)",
+                "type": "object",
+                "properties": {
+                  "mcp_tool": {
+                    "description": "The MCP tool name (e.g., `brp_status`)",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "mcp_tool"
+                ]
+              },
+              {
+                "description": "BRP tool execution (calls Bevy Remote Protocol)",
+                "type": "object",
+                "properties": {
+                  "mcp_tool": {
+                    "description": "The MCP tool name (e.g., `world_spawn_entity`)",
+                    "type": "string"
+                  },
+                  "brp_method": {
+                    "description": "The BRP method name (e.g., `world.spawn_entity`)",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "mcp_tool",
+                  "brp_method"
+                ]
+              }
+            ]
+          },
+          "metadata": {},
+          "parameters": {},
+          "result": {},
+          "error_info": {},
+          "brp_extras_debug_info": {}
+        },
+        "required": [
+          "status",
+          "message",
+          "call_info"
+        ],
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "ToolCallJsonResponse",
+        "description": "Standard JSON response structure for all tools"
+      }
+    },
+    {
+      "name": "brp_extras_drag_mouse",
+      "title": "drag mouse",
+      "description": "Performs a smooth drag operation from start to end position via bevy_brp_extras. Interpolates cursor movement over specified number of frames while holding button pressed.\n\nButton options: Left, Right, Middle, Back, Forward\n\nExamples:\n```json\n{\n  \"button\": \"Left\",\n  \"start\": [100.0, 100.0],\n  \"end\": [300.0, 200.0],\n  \"frames\": 30\n}  // Drag over 30 frames for smooth animation\n```\n\nPrerequisites: bevy_brp_extras dependency and BrpExtrasPlugin registered.\n",
+      "annotations": {
+        "title": "Extras: drag mouse",
+        "readOnlyHint": false,
+        "destructiveHint": true,
+        "idempotentHint": false,
+        "openWorldHint": false
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "button": {
+            "type": "string",
+            "description": "Mouse button for BRP operations"
+          },
+          "start": {
+            "anyOf": [
+              {
+                "type": "object"
+              },
+              {
+                "type": "array",
+                "items": {}
+              },
+              {
+                "type": "string"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Starting position as [x, y]"
+          },
+          "end": {
+            "anyOf": [
+              {
+                "type": "object"
+              },
+              {
+                "type": "array",
+                "items": {}
+              },
+              {
+                "type": "string"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Ending position as [x, y]"
+          },
+          "frames": {
+            "type": "number",
+            "description": "Number of frames over which to interpolate the drag"
+          },
+          "window": {
+            "type": "number",
+            "description": "Optional window entity ID to target (defaults to primary window)"
+          },
+          "port": {
+            "type": "number",
+            "description": "Port number for BRP - defaults to 15702"
+          }
+        },
+        "required": [
+          "button",
+          "start",
+          "end",
+          "frames"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "description": "Response status types",
+            "type": "string",
+            "enum": [
+              "success",
+              "error"
+            ]
+          },
+          "message": {
+            "type": "string"
+          },
+          "call_info": {
+            "description": "Call information for tracking tool execution",
+            "anyOf": [
+              {
+                "description": "Local tool execution (no BRP involved)",
+                "type": "object",
+                "properties": {
+                  "mcp_tool": {
+                    "description": "The MCP tool name (e.g., `brp_status`)",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "mcp_tool"
+                ]
+              },
+              {
+                "description": "BRP tool execution (calls Bevy Remote Protocol)",
+                "type": "object",
+                "properties": {
+                  "mcp_tool": {
+                    "description": "The MCP tool name (e.g., `world_spawn_entity`)",
+                    "type": "string"
+                  },
+                  "brp_method": {
+                    "description": "The BRP method name (e.g., `world.spawn_entity`)",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "mcp_tool",
+                  "brp_method"
+                ]
+              }
+            ]
+          },
+          "metadata": {},
+          "parameters": {},
+          "result": {},
+          "error_info": {},
+          "brp_extras_debug_info": {}
+        },
+        "required": [
+          "status",
+          "message",
+          "call_info"
+        ],
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "ToolCallJsonResponse",
+        "description": "Standard JSON response structure for all tools"
+      }
+    },
+    {
+      "name": "brp_extras_get_diagnostics",
+      "title": "get FPS diagnostics",
+      "description": "Get FPS and frame time diagnostics from a running Bevy application. Returns current, average, and smoothed values from Bevy's built-in diagnostics system.\n\nResponse includes:\n- fps.current: Most recent FPS measurement\n- fps.average: Simple moving average over the history buffer\n- fps.smoothed: Exponentially smoothed FPS value\n- fps.history_len: Number of samples currently in the buffer\n- fps.max_history_len: Maximum buffer capacity (default: 120 frames)\n- fps.history_duration_secs: Time span covered by the history buffer\n- frame_time_ms.current: Most recent frame time in milliseconds\n- frame_time_ms.average: Average frame time over the history buffer\n- frame_time_ms.smoothed: Exponentially smoothed frame time\n- frame_count: Total frames since application start\n\nExample:\n```json\n{}\n```\n\nPrerequisites: bevy_brp_extras dependency with `diagnostics` feature enabled (on by default) and BrpExtrasPlugin registered.\n",
+      "annotations": {
+        "title": "Extras: get FPS diagnostics",
+        "readOnlyHint": true,
+        "openWorldHint": false
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "port": {
+            "type": "number",
+            "description": "Port number for BRP - defaults to 15702"
+          }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "description": "Response status types",
+            "type": "string",
+            "enum": [
+              "success",
+              "error"
+            ]
+          },
+          "message": {
+            "type": "string"
+          },
+          "call_info": {
+            "description": "Call information for tracking tool execution",
+            "anyOf": [
+              {
+                "description": "Local tool execution (no BRP involved)",
+                "type": "object",
+                "properties": {
+                  "mcp_tool": {
+                    "description": "The MCP tool name (e.g., `brp_status`)",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "mcp_tool"
+                ]
+              },
+              {
+                "description": "BRP tool execution (calls Bevy Remote Protocol)",
+                "type": "object",
+                "properties": {
+                  "mcp_tool": {
+                    "description": "The MCP tool name (e.g., `world_spawn_entity`)",
+                    "type": "string"
+                  },
+                  "brp_method": {
+                    "description": "The BRP method name (e.g., `world.spawn_entity`)",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "mcp_tool",
+                  "brp_method"
+                ]
+              }
+            ]
+          },
+          "metadata": {},
+          "parameters": {},
+          "result": {},
+          "error_info": {},
+          "brp_extras_debug_info": {}
+        },
+        "required": [
+          "status",
+          "message",
+          "call_info"
+        ],
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "ToolCallJsonResponse",
+        "description": "Standard JSON response structure for all tools"
+      }
+    },
+    {
+      "name": "brp_extras_move_mouse",
+      "title": "move mouse cursor",
+      "description": "Moves the mouse cursor in Bevy apps via bevy_brp_extras. Supports both delta (relative) and absolute position movement with optional window targeting.\n\nMovement modes:\n- Delta: Relative movement from current position\n- Absolute: Move to specific coordinates\n\nExamples:\n```json\n{\"delta\": [50.0, 30.0]}                    // Move right 50px, down 30px\n{\"position\": [200.0, 150.0]}               // Move to absolute position\n{\"position\": [100.0, 100.0], \"window\": 42} // Target specific window\n```\n\nPrerequisites: bevy_brp_extras dependency and BrpExtrasPlugin registered.\n",
+      "annotations": {
+        "title": "Extras: move mouse cursor",
+        "readOnlyHint": false,
+        "destructiveHint": true,
+        "idempotentHint": false,
+        "openWorldHint": false
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "delta": {
+            "anyOf": [
+              {
+                "type": "object"
+              },
+              {
+                "type": "array",
+                "items": {}
+              },
+              {
+                "type": "string"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Delta movement (relative) as [x, y]. Exactly one of delta or position must be provided."
+          },
+          "position": {
+            "anyOf": [
+              {
+                "type": "object"
+              },
+              {
+                "type": "array",
+                "items": {}
+              },
+              {
+                "type": "string"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Absolute position as [x, y]. Exactly one of delta or position must be provided."
+          },
+          "window": {
+            "type": "number",
+            "description": "Optional window entity ID to target (defaults to primary window)"
+          },
+          "port": {
+            "type": "number",
+            "description": "Port number for BRP - defaults to 15702"
+          }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "description": "Response status types",
+            "type": "string",
+            "enum": [
+              "success",
+              "error"
+            ]
+          },
+          "message": {
+            "type": "string"
+          },
+          "call_info": {
+            "description": "Call information for tracking tool execution",
+            "anyOf": [
+              {
+                "description": "Local tool execution (no BRP involved)",
+                "type": "object",
+                "properties": {
+                  "mcp_tool": {
+                    "description": "The MCP tool name (e.g., `brp_status`)",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "mcp_tool"
+                ]
+              },
+              {
+                "description": "BRP tool execution (calls Bevy Remote Protocol)",
+                "type": "object",
+                "properties": {
+                  "mcp_tool": {
+                    "description": "The MCP tool name (e.g., `world_spawn_entity`)",
+                    "type": "string"
+                  },
+                  "brp_method": {
+                    "description": "The BRP method name (e.g., `world.spawn_entity`)",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "mcp_tool",
+                  "brp_method"
+                ]
+              }
+            ]
+          },
+          "metadata": {},
+          "parameters": {},
+          "result": {},
+          "error_info": {},
+          "brp_extras_debug_info": {}
+        },
+        "required": [
+          "status",
+          "message",
+          "call_info"
+        ],
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "ToolCallJsonResponse",
+        "description": "Standard JSON response structure for all tools"
+      }
+    },
+    {
+      "name": "brp_extras_pinch_gesture",
+      "title": "pinch gesture",
+      "description": "Sends pinch gesture events to Bevy apps via bevy_brp_extras. Simulates trackpad pinch gestures for zoom operations.\n\nPlatform: macOS trackpad gestures (may not be supported on all platforms)\n\nExamples:\n```json\n{\"delta\": 2.5}   // Pinch to zoom in\n{\"delta\": -1.5}  // Pinch to zoom out\n```\n\nPrerequisites: bevy_brp_extras dependency and BrpExtrasPlugin registered.\n",
+      "annotations": {
+        "title": "Extras: pinch gesture",
+        "readOnlyHint": false,
+        "destructiveHint": true,
+        "idempotentHint": false,
+        "openWorldHint": false
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "delta": {
+            "type": "number",
+            "description": "Pinch delta value (positive = zoom in, negative = zoom out)"
+          },
+          "port": {
+            "type": "number",
+            "description": "Port number for BRP - defaults to 15702"
+          }
+        },
+        "required": [
+          "delta"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "description": "Response status types",
+            "type": "string",
+            "enum": [
+              "success",
+              "error"
+            ]
+          },
+          "message": {
+            "type": "string"
+          },
+          "call_info": {
+            "description": "Call information for tracking tool execution",
+            "anyOf": [
+              {
+                "description": "Local tool execution (no BRP involved)",
+                "type": "object",
+                "properties": {
+                  "mcp_tool": {
+                    "description": "The MCP tool name (e.g., `brp_status`)",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "mcp_tool"
+                ]
+              },
+              {
+                "description": "BRP tool execution (calls Bevy Remote Protocol)",
+                "type": "object",
+                "properties": {
+                  "mcp_tool": {
+                    "description": "The MCP tool name (e.g., `world_spawn_entity`)",
+                    "type": "string"
+                  },
+                  "brp_method": {
+                    "description": "The BRP method name (e.g., `world.spawn_entity`)",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "mcp_tool",
+                  "brp_method"
+                ]
+              }
+            ]
+          },
+          "metadata": {},
+          "parameters": {},
+          "result": {},
+          "error_info": {},
+          "brp_extras_debug_info": {}
+        },
+        "required": [
+          "status",
+          "message",
+          "call_info"
+        ],
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "ToolCallJsonResponse",
+        "description": "Standard JSON response structure for all tools"
+      }
+    },
+    {
+      "name": "brp_extras_rotation_gesture",
+      "title": "rotation gesture",
+      "description": "Sends rotation gesture events to Bevy apps via bevy_brp_extras. Simulates trackpad rotation gestures.\n\nPlatform: macOS trackpad gestures (may not be supported on all platforms)\n\nExamples:\n```json\n{\"delta\": 0.5}   // Rotate clockwise (radians)\n{\"delta\": -0.3}  // Rotate counter-clockwise (radians)\n```\n\nPrerequisites: bevy_brp_extras dependency and BrpExtrasPlugin registered.\n",
+      "annotations": {
+        "title": "Extras: rotation gesture",
+        "readOnlyHint": false,
+        "destructiveHint": true,
+        "idempotentHint": false,
+        "openWorldHint": false
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "delta": {
+            "type": "number",
+            "description": "Rotation delta in radians"
+          },
+          "port": {
+            "type": "number",
+            "description": "Port number for BRP - defaults to 15702"
+          }
+        },
+        "required": [
+          "delta"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "description": "Response status types",
+            "type": "string",
+            "enum": [
+              "success",
+              "error"
+            ]
+          },
+          "message": {
+            "type": "string"
+          },
+          "call_info": {
+            "description": "Call information for tracking tool execution",
+            "anyOf": [
+              {
+                "description": "Local tool execution (no BRP involved)",
+                "type": "object",
+                "properties": {
+                  "mcp_tool": {
+                    "description": "The MCP tool name (e.g., `brp_status`)",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "mcp_tool"
+                ]
+              },
+              {
+                "description": "BRP tool execution (calls Bevy Remote Protocol)",
+                "type": "object",
+                "properties": {
+                  "mcp_tool": {
+                    "description": "The MCP tool name (e.g., `world_spawn_entity`)",
+                    "type": "string"
+                  },
+                  "brp_method": {
+                    "description": "The BRP method name (e.g., `world.spawn_entity`)",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "mcp_tool",
+                  "brp_method"
+                ]
+              }
+            ]
+          },
+          "metadata": {},
+          "parameters": {},
+          "result": {},
+          "error_info": {},
+          "brp_extras_debug_info": {}
+        },
+        "required": [
+          "status",
+          "message",
+          "call_info"
+        ],
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "ToolCallJsonResponse",
+        "description": "Standard JSON response structure for all tools"
+      }
+    },
+    {
+      "name": "brp_extras_screenshot",
+      "title": "take screenshot",
+      "description": "Capture the primary window, a camera viewport, or an entity crop in one call.\n\nExamples:\n- Full window: {\"path\":\"/tmp/full.png\",\"port\":15702}\n- Camera viewport: {\"camera\":4294967297,\"path\":\"/tmp/camera.png\",\"port\":15702}\n- Entity ID: {\"entity\":4294967298,\"path\":\"/tmp/entity.png\",\"port\":15702}\n- Entity name: {\"name\":\"NatesList\",\"path\":\"/tmp/nates-list.png\",\"port\":15702}\n\nParameters:\n- path: Required PNG destination.\n- entity: Optional canonical u64 Bevy entity ID.\n- name: Optional one-call lookup of a unique, case-sensitive exact Bevy Name.\n- camera: Optional camera entity ID. Alone, captures its viewport; with entity or name, selects the\n  camera used for the crop.\n- padding: Optional physical-pixel padding around an entity crop; defaults to zero.\n- port: BRP port; defaults to 15702.\n\nUse either entity or name, never both. Padding requires one of them. A name capture internally uses\nthe same standard world.query lookup as world_find_entities_by_name, requires one exact match, and\nsends only the resolved entity ID to bevy_brp_extras. Use world_find_entities_by_name first when you\nwant non-exact discovery, need to inspect duplicate matches, or want to choose the entity ID yourself.\n\nEntity crops require the entity to be visible to the selected camera. If camera is omitted, exactly\none eligible camera must be unambiguous. Crops use AABB bounds, or Bevy UI bounds when the\nbevy_brp_extras ui feature is enabled. They contain the final composited pixels inside the bounds,\nnot an isolated render of the entity.\n\nThe call returns only after the PNG is completely encoded and atomically published; filesystem\npolling is unnecessary. A minimized, hidden, or fully occluded primary window may legitimately\nproduce a black image on platforms that stop presenting it.\n\nRequires bevy_brp_extras and BrpExtrasPlugin in the target application.\n",
+      "annotations": {
+        "title": "Extras: take screenshot",
+        "readOnlyHint": false,
+        "destructiveHint": true,
+        "idempotentHint": false,
+        "openWorldHint": false
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "entity": {
+            "type": "number",
+            "description": "Canonical Bevy entity ID to capture."
+          },
+          "name": {
+            "type": "string",
+            "description": "Unique, case-sensitive exact Bevy `Name` to resolve before capture."
+          },
+          "camera": {
+            "type": "number",
+            "description": "Camera entity ID. Captures its viewport, or selects it for an entity crop."
+          },
+          "padding": {
+            "type": "number",
+            "description": "Physical pixels to add around an entity crop. Defaults to zero."
+          },
+          "path": {
+            "type": "string",
+            "description": "File path where the complete PNG should be published."
+          },
+          "port": {
+            "type": "number",
+            "description": "Port number for BRP - defaults to 15702"
+          }
+        },
+        "required": [
+          "path"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "description": "Response status types",
+            "type": "string",
+            "enum": [
+              "success",
+              "error"
+            ]
+          },
+          "message": {
+            "type": "string"
+          },
+          "call_info": {
+            "description": "Call information for tracking tool execution",
+            "anyOf": [
+              {
+                "description": "Local tool execution (no BRP involved)",
+                "type": "object",
+                "properties": {
+                  "mcp_tool": {
+                    "description": "The MCP tool name (e.g., `brp_status`)",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "mcp_tool"
+                ]
+              },
+              {
+                "description": "BRP tool execution (calls Bevy Remote Protocol)",
+                "type": "object",
+                "properties": {
+                  "mcp_tool": {
+                    "description": "The MCP tool name (e.g., `world_spawn_entity`)",
+                    "type": "string"
+                  },
+                  "brp_method": {
+                    "description": "The BRP method name (e.g., `world.spawn_entity`)",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "mcp_tool",
+                  "brp_method"
+                ]
+              }
+            ]
+          },
+          "metadata": {},
+          "parameters": {},
+          "result": {},
+          "error_info": {},
+          "brp_extras_debug_info": {}
+        },
+        "required": [
+          "status",
+          "message",
+          "call_info"
+        ],
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "ToolCallJsonResponse",
+        "description": "Standard JSON response structure for all tools"
+      }
+    },
+    {
+      "name": "brp_extras_scroll_mouse",
+      "title": "scroll mouse wheel",
+      "description": "Sends mouse wheel scroll events to Bevy apps via bevy_brp_extras. Supports both line-based and pixel-based scrolling in horizontal and vertical directions.\n\nScroll units: Line (default text line scrolling), Pixel (precise pixel-based scrolling)\n\nExamples:\n```json\n{\"x\": 0.0, \"y\": 5.0, \"unit\": \"Line\"}      // Scroll down 5 lines\n{\"x\": 3.0, \"y\": 0.0, \"unit\": \"Line\"}      // Scroll right 3 lines\n{\"x\": 0.0, \"y\": -100.0, \"unit\": \"Pixel\"}  // Scroll up 100 pixels\n```\n\nPrerequisites: bevy_brp_extras dependency and BrpExtrasPlugin registered.\n",
+      "annotations": {
+        "title": "Extras: scroll mouse wheel",
+        "readOnlyHint": false,
+        "destructiveHint": true,
+        "idempotentHint": false,
+        "openWorldHint": false
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "x": {
+            "type": "number",
+            "description": "Horizontal scroll amount"
+          },
+          "y": {
+            "type": "number",
+            "description": "Vertical scroll amount"
+          },
+          "unit": {
+            "type": "string",
+            "description": "Scroll unit for BRP scroll operations"
+          },
+          "window": {
+            "type": "number",
+            "description": "Optional window entity ID to target (defaults to primary window)"
+          },
+          "port": {
+            "type": "number",
+            "description": "Port number for BRP - defaults to 15702"
+          }
+        },
+        "required": [
+          "x",
+          "y",
+          "unit"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "description": "Response status types",
+            "type": "string",
+            "enum": [
+              "success",
+              "error"
+            ]
+          },
+          "message": {
+            "type": "string"
+          },
+          "call_info": {
+            "description": "Call information for tracking tool execution",
+            "anyOf": [
+              {
+                "description": "Local tool execution (no BRP involved)",
+                "type": "object",
+                "properties": {
+                  "mcp_tool": {
+                    "description": "The MCP tool name (e.g., `brp_status`)",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "mcp_tool"
+                ]
+              },
+              {
+                "description": "BRP tool execution (calls Bevy Remote Protocol)",
+                "type": "object",
+                "properties": {
+                  "mcp_tool": {
+                    "description": "The MCP tool name (e.g., `world_spawn_entity`)",
+                    "type": "string"
+                  },
+                  "brp_method": {
+                    "description": "The BRP method name (e.g., `world.spawn_entity`)",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "mcp_tool",
+                  "brp_method"
+                ]
+              }
+            ]
+          },
+          "metadata": {},
+          "parameters": {},
+          "result": {},
+          "error_info": {},
+          "brp_extras_debug_info": {}
+        },
+        "required": [
+          "status",
+          "message",
+          "call_info"
+        ],
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "ToolCallJsonResponse",
+        "description": "Standard JSON response structure for all tools"
+      }
+    },
+    {
+      "name": "brp_extras_send_keys",
+      "title": "send keys",
+      "description": "Sends keyboard input to Bevy apps via bevy_brp_extras. Performs complete press-hold-release cycles for testing, remote control, and automation.\n\nKey formats: Letters (KeyA-Z), Digits (Digit0-9), Function (F1-F24), Modifiers (ShiftLeft/Right, ControlLeft/Right, AltLeft/Right, SuperLeft/Right), Navigation (Arrows, Home/End, PageUp/Down), Editing (Enter, Tab, Space, Backspace, Delete, Escape).\n\nPlatform-specific modifiers:\n- macOS: Use \"SuperLeft\" or \"SuperRight\" for Command key (⌘)\n- Windows: Use \"SuperLeft\" or \"SuperRight\" for Windows key (⊞)\n- Linux: Use \"SuperLeft\" or \"SuperRight\" for Super/Meta key\n\nExamples:\n```json\n{\"keys\": [\"KeyH\", \"KeyI\"]}              // Type \"hi\"\n{\"keys\": [\"Space\"], \"duration_ms\": 2000} // Hold space 2 sec\n{\"keys\": [\"ShiftLeft\", \"KeyA\"]}         // Shift+A combo\n```\nPrerequisites: bevy_brp_extras dependency and BrpExtrasPlugin registered.\n",
+      "annotations": {
+        "title": "Extras: send keys",
+        "readOnlyHint": false,
+        "destructiveHint": true,
+        "idempotentHint": false,
+        "openWorldHint": false
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "keys": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Array of key code names to send"
+          },
+          "duration_ms": {
+            "type": "number",
+            "description": "Duration in milliseconds to hold the keys before releasing (default: 100ms, max: 60000ms)"
+          },
+          "port": {
+            "type": "number",
+            "description": "Port number for BRP - defaults to 15702"
+          }
+        },
+        "required": [
+          "keys"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "description": "Response status types",
+            "type": "string",
+            "enum": [
+              "success",
+              "error"
+            ]
+          },
+          "message": {
+            "type": "string"
+          },
+          "call_info": {
+            "description": "Call information for tracking tool execution",
+            "anyOf": [
+              {
+                "description": "Local tool execution (no BRP involved)",
+                "type": "object",
+                "properties": {
+                  "mcp_tool": {
+                    "description": "The MCP tool name (e.g., `brp_status`)",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "mcp_tool"
+                ]
+              },
+              {
+                "description": "BRP tool execution (calls Bevy Remote Protocol)",
+                "type": "object",
+                "properties": {
+                  "mcp_tool": {
+                    "description": "The MCP tool name (e.g., `world_spawn_entity`)",
+                    "type": "string"
+                  },
+                  "brp_method": {
+                    "description": "The BRP method name (e.g., `world.spawn_entity`)",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "mcp_tool",
+                  "brp_method"
+                ]
+              }
+            ]
+          },
+          "metadata": {},
+          "parameters": {},
+          "result": {},
+          "error_info": {},
+          "brp_extras_debug_info": {}
+        },
+        "required": [
+          "status",
+          "message",
+          "call_info"
+        ],
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "ToolCallJsonResponse",
+        "description": "Standard JSON response structure for all tools"
+      }
+    },
+    {
+      "name": "brp_extras_send_mouse_button",
+      "title": "send mouse button",
+      "description": "Sends mouse button input to Bevy apps via bevy_brp_extras. Performs complete press-hold-release cycles for testing, remote control, and automation.\n\nButton options: Left, Right, Middle, Back, Forward\n\nExamples:\n```json\n{\"button\": \"Left\", \"duration_ms\": 100}     // Click left button\n{\"button\": \"Right\", \"duration_ms\": 500}    // Hold right button 0.5 sec\n{\"button\": \"Middle\"}                       // Quick middle click (default 100ms)\n```\n\nPrerequisites: bevy_brp_extras dependency and BrpExtrasPlugin registered.\n",
+      "annotations": {
+        "title": "Extras: send mouse button",
+        "readOnlyHint": false,
+        "destructiveHint": true,
+        "idempotentHint": false,
+        "openWorldHint": false
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "button": {
+            "type": "string",
+            "description": "Mouse button for BRP operations"
+          },
+          "duration_ms": {
+            "type": "number",
+            "description": "Duration in milliseconds to hold the button before releasing (default: 100ms, max: 60000ms)"
+          },
+          "window": {
+            "type": "number",
+            "description": "Optional window entity ID to target (defaults to primary window)"
+          },
+          "port": {
+            "type": "number",
+            "description": "Port number for BRP - defaults to 15702"
+          }
+        },
+        "required": [
+          "button"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "description": "Response status types",
+            "type": "string",
+            "enum": [
+              "success",
+              "error"
+            ]
+          },
+          "message": {
+            "type": "string"
+          },
+          "call_info": {
+            "description": "Call information for tracking tool execution",
+            "anyOf": [
+              {
+                "description": "Local tool execution (no BRP involved)",
+                "type": "object",
+                "properties": {
+                  "mcp_tool": {
+                    "description": "The MCP tool name (e.g., `brp_status`)",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "mcp_tool"
+                ]
+              },
+              {
+                "description": "BRP tool execution (calls Bevy Remote Protocol)",
+                "type": "object",
+                "properties": {
+                  "mcp_tool": {
+                    "description": "The MCP tool name (e.g., `world_spawn_entity`)",
+                    "type": "string"
+                  },
+                  "brp_method": {
+                    "description": "The BRP method name (e.g., `world.spawn_entity`)",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "mcp_tool",
+                  "brp_method"
+                ]
+              }
+            ]
+          },
+          "metadata": {},
+          "parameters": {},
+          "result": {},
+          "error_info": {},
+          "brp_extras_debug_info": {}
+        },
+        "required": [
+          "status",
+          "message",
+          "call_info"
+        ],
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "ToolCallJsonResponse",
+        "description": "Standard JSON response structure for all tools"
+      }
+    },
+    {
+      "name": "brp_extras_set_window_title",
+      "title": "change window title",
+      "description": "Changes the window title of a running Bevy application to provide visual feedback or indicate application state.\n\nExample:\n```json\n{\"title\": \"My Game - Level 2\"}\n```\n\nPrerequisites: bevy_brp_extras dependency and BrpExtrasPlugin registered.\n\nNote: Only affects the primary window.\n",
+      "annotations": {
+        "title": "Extras: change window title",
+        "readOnlyHint": false,
+        "destructiveHint": true,
+        "idempotentHint": true,
+        "openWorldHint": false
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string",
+            "description": "The new title to set for the window"
+          },
+          "port": {
+            "type": "number",
+            "description": "Port number for BRP - defaults to 15702"
+          }
+        },
+        "required": [
+          "title"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "description": "Response status types",
+            "type": "string",
+            "enum": [
+              "success",
+              "error"
+            ]
+          },
+          "message": {
+            "type": "string"
+          },
+          "call_info": {
+            "description": "Call information for tracking tool execution",
+            "anyOf": [
+              {
+                "description": "Local tool execution (no BRP involved)",
+                "type": "object",
+                "properties": {
+                  "mcp_tool": {
+                    "description": "The MCP tool name (e.g., `brp_status`)",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "mcp_tool"
+                ]
+              },
+              {
+                "description": "BRP tool execution (calls Bevy Remote Protocol)",
+                "type": "object",
+                "properties": {
+                  "mcp_tool": {
+                    "description": "The MCP tool name (e.g., `world_spawn_entity`)",
+                    "type": "string"
+                  },
+                  "brp_method": {
+                    "description": "The BRP method name (e.g., `world.spawn_entity`)",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "mcp_tool",
+                  "brp_method"
+                ]
+              }
+            ]
+          },
+          "metadata": {},
+          "parameters": {},
+          "result": {},
+          "error_info": {},
+          "brp_extras_debug_info": {}
+        },
+        "required": [
+          "status",
+          "message",
+          "call_info"
+        ],
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "ToolCallJsonResponse",
+        "description": "Standard JSON response structure for all tools"
+      }
+    },
+    {
+      "name": "brp_extras_type_text",
+      "title": "type text sequentially",
+      "description": "Types text sequentially in Bevy apps via bevy_brp_extras. Characters are typed one per frame with proper key press/release cycles, simulating realistic human typing.\n\nUnlike `send_keys` which sends all keys simultaneously (for chords and shortcuts), `type_text` queues characters and types them sequentially. This is ideal for text input fields that need to process each character individually.\n\nSupported characters:\n- Letters (a-z, A-Z) - uppercase uses Shift\n- Digits (0-9)\n- Common symbols (!@#$%^&*()-=_+[]{}|;':\",.<>/?\\`~)\n- Whitespace (space, newline, tab)\n\nCharacters that cannot be mapped will be skipped and reported in the response.\n\nExamples:\n```json\n{\"text\": \"hello world\"}           // Types 11 characters across 11 frames\n{\"text\": \"Hello, World!\\n\"}       // Mixed case with punctuation and newline\n{\"text\": \"test@example.com\"}      // Email address with @ symbol\n```\n\nPrerequisites: bevy_brp_extras dependency and BrpExtrasPlugin registered.\n",
+      "annotations": {
+        "title": "Extras: type text sequentially",
+        "readOnlyHint": false,
+        "destructiveHint": true,
+        "idempotentHint": false,
+        "openWorldHint": false
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "text": {
+            "type": "string",
+            "description": "Text to type (supports letters, numbers, symbols, newlines, tabs)"
+          },
+          "port": {
+            "type": "number",
+            "description": "Port number for BRP - defaults to 15702"
+          }
+        },
+        "required": [
+          "text"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "description": "Response status types",
+            "type": "string",
+            "enum": [
+              "success",
+              "error"
+            ]
+          },
+          "message": {
+            "type": "string"
+          },
+          "call_info": {
+            "description": "Call information for tracking tool execution",
+            "anyOf": [
+              {
+                "description": "Local tool execution (no BRP involved)",
+                "type": "object",
+                "properties": {
+                  "mcp_tool": {
+                    "description": "The MCP tool name (e.g., `brp_status`)",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "mcp_tool"
+                ]
+              },
+              {
+                "description": "BRP tool execution (calls Bevy Remote Protocol)",
+                "type": "object",
+                "properties": {
+                  "mcp_tool": {
+                    "description": "The MCP tool name (e.g., `world_spawn_entity`)",
+                    "type": "string"
+                  },
+                  "brp_method": {
+                    "description": "The BRP method name (e.g., `world.spawn_entity`)",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "mcp_tool",
+                  "brp_method"
+                ]
+              }
+            ]
+          },
+          "metadata": {},
+          "parameters": {},
+          "result": {},
+          "error_info": {},
+          "brp_extras_debug_info": {}
+        },
+        "required": [
+          "status",
+          "message",
+          "call_info"
+        ],
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "ToolCallJsonResponse",
+        "description": "Standard JSON response structure for all tools"
+      }
+    },
+    {
+      "name": "brp_launch",
+      "title": "launch bevy app or example",
+      "description": "Launches Bevy apps or examples using unified target search.\n\nSearches for the target by name across both apps and examples. Use search_order to control priority:\n- \"app\" (default): searches apps first, then examples\n- \"example\": searches examples first, then apps\n\nThe response includes a launched_as field (\"app\" or \"example\") indicating how the target was resolved.\n\nIf the target is not found as either type, returns an enriched error with an available_targets array listing all apps and examples (name, kind, path). Present these to the user as a table so they can pick the correct target.\n\nOptional args parameter passes command-line arguments to the launched process. For apps, args are appended directly. For examples, args are passed after a `--` separator (cargo run --example foo -- args...).\n\nFeatures: Non-blocking execution, temp directory logs, debug/release profiles, multi-instance support.\n\nMulti-instance launching:\n- When instance_count > 1, launches multiple instances on sequential ports starting from the specified port.\n- Each instance gets its own log file with port in filename\n\nNotes:\n- App launches use a lock-free freshness check before invoking Cargo. If the binary appears up to date, the tool launches it directly without running cargo build. If the binary is missing, stale, or freshness cannot be determined confidently, the tool runs cargo build first.\n- Example launches always invoke cargo run --example. Cargo decides whether the example is already fresh or needs rebuilding.\n- Optional `path` parameter overrides the default search roots (MCP workspace roots / cwd). When provided, only the specified OS-level directory is searched for Bevy projects.\n- If multiple targets with the same name exist in different packages, you must specify the package_name parameter.\n- `package_name` matches the `package_name` field returned by `brp_list_bevy` for exact disambiguation.\n- When specifying a port, bevy_brp_extras is required to support listening on the environment variable BRP_EXTRAS_PORT.\n",
+      "annotations": {
+        "title": "App: launch bevy app or example",
+        "readOnlyHint": false,
+        "destructiveHint": true,
+        "idempotentHint": false,
+        "openWorldHint": false
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "target_name": {
+            "type": "string",
+            "description": "Name of the Bevy target to launch (app or example)"
+          },
+          "profile": {
+            "type": "string",
+            "description": "Build profile to use (debug or release)"
+          },
+          "path": {
+            "type": "string",
+            "description": "Optional OS-level path to use as the search root. Overrides the default MCP workspace\nroots."
+          },
+          "package_name": {
+            "type": "string",
+            "description": "Package name to filter when multiple targets with the same name exist"
+          },
+          "port": {
+            "type": "number",
+            "description": "Port number for BRP - defaults to 15702"
+          },
+          "instance_count": {
+            "type": "number",
+            "description": "Count of instances to launch in sequence\nValidates count is within 1-100 - defaults to 1"
+          },
+          "env": {
+            "type": "object",
+            "description": "Optional environment variables to set on the launched process"
+          },
+          "search_order": {
+            "type": "string",
+            "description": "Search order for target resolution: \"app\" searches apps first (default), \"example\" searches\nexamples first"
+          },
+          "args": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Optional command-line arguments to pass to the launched process"
+          }
+        },
+        "required": [
+          "target_name"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "description": "Response status types",
+            "type": "string",
+            "enum": [
+              "success",
+              "error"
+            ]
+          },
+          "message": {
+            "type": "string"
+          },
+          "call_info": {
+            "description": "Call information for tracking tool execution",
+            "anyOf": [
+              {
+                "description": "Local tool execution (no BRP involved)",
+                "type": "object",
+                "properties": {
+                  "mcp_tool": {
+                    "description": "The MCP tool name (e.g., `brp_status`)",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "mcp_tool"
+                ]
+              },
+              {
+                "description": "BRP tool execution (calls Bevy Remote Protocol)",
+                "type": "object",
+                "properties": {
+                  "mcp_tool": {
+                    "description": "The MCP tool name (e.g., `world_spawn_entity`)",
+                    "type": "string"
+                  },
+                  "brp_method": {
+                    "description": "The BRP method name (e.g., `world.spawn_entity`)",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "mcp_tool",
+                  "brp_method"
+                ]
+              }
+            ]
+          },
+          "metadata": {},
+          "parameters": {},
+          "result": {},
+          "error_info": {},
+          "brp_extras_debug_info": {}
+        },
+        "required": [
+          "status",
+          "message",
+          "call_info"
+        ],
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "ToolCallJsonResponse",
+        "description": "Standard JSON response structure for all tools"
+      }
+    },
+    {
+      "name": "brp_list_active_watches",
+      "title": "list active watches",
+      "description": "List active watch subscriptions to audit running tasks, find log paths, or manage resources by identifying unneeded watches.\n\nReturns:\n- status: \"success\"\n- count: Number of active watches\n- watches: Array containing:\n  - watch_id: Numeric identifier\n  - entity_id: Entity being watched\n  - watch_type: \"get\" or \"list\"\n  - log_path: Path to log file\n  - port: BRP port connected to\n\nLog file naming: bevy_brp_mcp_watch_{watch_id}_{watch_type}_{entity_id}_{timestamp}.log\n\nUse to find watches for bevy_stop_watch or locate logs for read_log.",
+      "annotations": {
+        "title": "Watch Monitoring: list active watches",
+        "readOnlyHint": true,
+        "openWorldHint": false
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {}
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "description": "Response status types",
+            "type": "string",
+            "enum": [
+              "success",
+              "error"
+            ]
+          },
+          "message": {
+            "type": "string"
+          },
+          "call_info": {
+            "description": "Call information for tracking tool execution",
+            "anyOf": [
+              {
+                "description": "Local tool execution (no BRP involved)",
+                "type": "object",
+                "properties": {
+                  "mcp_tool": {
+                    "description": "The MCP tool name (e.g., `brp_status`)",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "mcp_tool"
+                ]
+              },
+              {
+                "description": "BRP tool execution (calls Bevy Remote Protocol)",
+                "type": "object",
+                "properties": {
+                  "mcp_tool": {
+                    "description": "The MCP tool name (e.g., `world_spawn_entity`)",
+                    "type": "string"
+                  },
+                  "brp_method": {
+                    "description": "The BRP method name (e.g., `world.spawn_entity`)",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "mcp_tool",
+                  "brp_method"
+                ]
+              }
+            ]
+          },
+          "metadata": {},
+          "parameters": {},
+          "result": {},
+          "error_info": {},
+          "brp_extras_debug_info": {}
+        },
+        "required": [
+          "status",
+          "message",
+          "call_info"
+        ],
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "ToolCallJsonResponse",
+        "description": "Standard JSON response structure for all tools"
+      }
+    },
+    {
+      "name": "brp_list_agent_tools",
+      "title": "list agent tools",
+      "description": "List curated BRP records published by the running application's developer.\n\nThe public structured result puts instructions in result.usage and records in result.tools. Each\nrecord includes its exact backing method and optional raw parameter/result JSON Schemas. Follow the\nusage, then pass a selected method and matching raw params to brp_execute. Records are not native\nMCP tools; rpc_discover instead exhaustively lists transport method names.\n\nEach request validates every record against the live instant methods and returns either the full\nlist or an error if any method is missing or watching. A missing endpoint means the app needs\nBrpExtrasPlugin; an installed endpoint may return an empty list. Direct HTTP JSON-RPC is a\ndeveloper-only alternative.\n",
+      "annotations": {
+        "title": "Discovery: list agent tools",
+        "readOnlyHint": true,
+        "openWorldHint": false
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "port": {
+            "type": "number",
+            "description": "Port number for BRP - defaults to 15702"
+          }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "description": "Response status types",
+            "type": "string",
+            "enum": [
+              "success",
+              "error"
+            ]
+          },
+          "message": {
+            "type": "string"
+          },
+          "call_info": {
+            "description": "Call information for tracking tool execution",
+            "anyOf": [
+              {
+                "description": "Local tool execution (no BRP involved)",
+                "type": "object",
+                "properties": {
+                  "mcp_tool": {
+                    "description": "The MCP tool name (e.g., `brp_status`)",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "mcp_tool"
+                ]
+              },
+              {
+                "description": "BRP tool execution (calls Bevy Remote Protocol)",
+                "type": "object",
+                "properties": {
+                  "mcp_tool": {
+                    "description": "The MCP tool name (e.g., `world_spawn_entity`)",
+                    "type": "string"
+                  },
+                  "brp_method": {
+                    "description": "The BRP method name (e.g., `world.spawn_entity`)",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "mcp_tool",
+                  "brp_method"
+                ]
+              }
+            ]
+          },
+          "metadata": {},
+          "parameters": {},
+          "result": {},
+          "error_info": {},
+          "brp_extras_debug_info": {}
+        },
+        "required": [
+          "status",
+          "message",
+          "call_info"
+        ],
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "ToolCallJsonResponse",
+        "description": "Standard JSON response structure for all tools"
+      }
+    },
+    {
+      "name": "brp_list_bevy",
+      "title": "list bevy apps and examples",
+      "description": "Discovers all Bevy apps and examples declared in workspace Cargo.toml files via cargo metadata.\nTargets not registered in Cargo.toml are not included.\nReturns target names, kind (app or example), BRP support level, build profiles, build status, and paths.\nEach item includes a `kind` field (\"app\" or \"example\") and `brp_level` field:\n  - \"extras\": Uses `BrpExtrasPlugin` (full support: screenshots, input simulation, clean shutdown, etc.)\n  - \"brp_only\": Uses `RemotePlugin` only (core BRP queries and mutations, no extras methods)\n  - \"none\": No BRP support detected\nFor bins, `brp_level` reflects whether the package's src/ tree uses BRP plugins.\nFor examples, the individual source file is checked for BRP plugin imports.\nOptional `path` parameter overrides the default search roots (MCP workspace roots / cwd). When provided, only the specified OS-level directory is searched for Bevy projects.\nUse `package_name` with `brp_launch`'s `package_name` parameter to disambiguate targets with the same name.\n",
+      "annotations": {
+        "title": "App: list bevy apps and examples",
+        "readOnlyHint": true,
+        "openWorldHint": false
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string",
+            "description": "Optional OS-level path to use as the search root. Overrides the default MCP workspace\nroots."
+          }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "description": "Response status types",
+            "type": "string",
+            "enum": [
+              "success",
+              "error"
+            ]
+          },
+          "message": {
+            "type": "string"
+          },
+          "call_info": {
+            "description": "Call information for tracking tool execution",
+            "anyOf": [
+              {
+                "description": "Local tool execution (no BRP involved)",
+                "type": "object",
+                "properties": {
+                  "mcp_tool": {
+                    "description": "The MCP tool name (e.g., `brp_status`)",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "mcp_tool"
+                ]
+              },
+              {
+                "description": "BRP tool execution (calls Bevy Remote Protocol)",
+                "type": "object",
+                "properties": {
+                  "mcp_tool": {
+                    "description": "The MCP tool name (e.g., `world_spawn_entity`)",
+                    "type": "string"
+                  },
+                  "brp_method": {
+                    "description": "The BRP method name (e.g., `world.spawn_entity`)",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "mcp_tool",
+                  "brp_method"
+                ]
+              }
+            ]
+          },
+          "metadata": {},
+          "parameters": {},
+          "result": {},
+          "error_info": {},
+          "brp_extras_debug_info": {}
+        },
+        "required": [
+          "status",
+          "message",
+          "call_info"
+        ],
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "ToolCallJsonResponse",
+        "description": "Standard JSON response structure for all tools"
+      }
+    },
+    {
+      "name": "brp_list_logs",
+      "title": "list log files",
+      "description": "Lists bevy_brp_mcp log files sorted newest first with optional verbose details.\n\nReturns: Log files from temp directory created when launching Bevy apps.",
+      "annotations": {
+        "title": "Logging: list log files",
+        "readOnlyHint": true,
+        "openWorldHint": false
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "app_name": {
+            "type": "string",
+            "description": "Optional filter to list logs for a specific app only"
+          },
+          "verbose": {
+            "type": "boolean",
+            "description": "Include full details (path, timestamps, size in bytes). Default is false for minimal output"
+          }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "description": "Response status types",
+            "type": "string",
+            "enum": [
+              "success",
+              "error"
+            ]
+          },
+          "message": {
+            "type": "string"
+          },
+          "call_info": {
+            "description": "Call information for tracking tool execution",
+            "anyOf": [
+              {
+                "description": "Local tool execution (no BRP involved)",
+                "type": "object",
+                "properties": {
+                  "mcp_tool": {
+                    "description": "The MCP tool name (e.g., `brp_status`)",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "mcp_tool"
+                ]
+              },
+              {
+                "description": "BRP tool execution (calls Bevy Remote Protocol)",
+                "type": "object",
+                "properties": {
+                  "mcp_tool": {
+                    "description": "The MCP tool name (e.g., `world_spawn_entity`)",
+                    "type": "string"
+                  },
+                  "brp_method": {
+                    "description": "The BRP method name (e.g., `world.spawn_entity`)",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "mcp_tool",
+                  "brp_method"
+                ]
+              }
+            ]
+          },
+          "metadata": {},
+          "parameters": {},
+          "result": {},
+          "error_info": {},
+          "brp_extras_debug_info": {}
+        },
+        "required": [
+          "status",
+          "message",
+          "call_info"
+        ],
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "ToolCallJsonResponse",
+        "description": "Standard JSON response structure for all tools"
+      }
+    },
+    {
+      "name": "brp_read_log",
+      "title": "read log file",
+      "description": "Reads bevy_brp_mcp log file contents with optional filtering.\n\nNote: Only bevy_brp_mcp logs readable for security. Use list_logs to find files.",
+      "annotations": {
+        "title": "Logging: read log file",
+        "readOnlyHint": true,
+        "openWorldHint": false
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "filename": {
+            "type": "string",
+            "description": "The log filename (e.g., `bevy_brp_mcp_myapp_1234567890.log`)"
+          },
+          "keyword": {
+            "type": "string",
+            "description": "Optional keyword to filter lines (case-insensitive)"
+          },
+          "tail_lines": {
+            "type": "number",
+            "description": "Optional number of lines to read from the end of file"
+          }
+        },
+        "required": [
+          "filename"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "description": "Response status types",
+            "type": "string",
+            "enum": [
+              "success",
+              "error"
+            ]
+          },
+          "message": {
+            "type": "string"
+          },
+          "call_info": {
+            "description": "Call information for tracking tool execution",
+            "anyOf": [
+              {
+                "description": "Local tool execution (no BRP involved)",
+                "type": "object",
+                "properties": {
+                  "mcp_tool": {
+                    "description": "The MCP tool name (e.g., `brp_status`)",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "mcp_tool"
+                ]
+              },
+              {
+                "description": "BRP tool execution (calls Bevy Remote Protocol)",
+                "type": "object",
+                "properties": {
+                  "mcp_tool": {
+                    "description": "The MCP tool name (e.g., `world_spawn_entity`)",
+                    "type": "string"
+                  },
+                  "brp_method": {
+                    "description": "The BRP method name (e.g., `world.spawn_entity`)",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "mcp_tool",
+                  "brp_method"
+                ]
+              }
+            ]
+          },
+          "metadata": {},
+          "parameters": {},
+          "result": {},
+          "error_info": {},
+          "brp_extras_debug_info": {}
+        },
+        "required": [
+          "status",
+          "message",
+          "call_info"
+        ],
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "ToolCallJsonResponse",
+        "description": "Standard JSON response structure for all tools"
+      }
+    },
+    {
+      "name": "brp_shutdown",
+      "title": "shutdown bevy app",
+      "description": "Shutdown running Bevy applications for proper resource cleanup\n\nShutdown behavior:\n1. Attempts bevy_brp_extras/shutdown for clean shutdown\n2. Falls back to process termination if unavailable\n3. Reports method used in response\n\nReturns:\n- status: \"success\" or \"error\"\n- method: \"clean_shutdown\" or \"process_kill\"\n- app_name: Target app name\n- port: Port used\n- message: Result description\n\nFor clean shutdown support, add bevy_brp_extras dependency and register BrpExtrasPlugin.\n",
+      "annotations": {
+        "title": "App: shutdown bevy app",
+        "readOnlyHint": false,
+        "destructiveHint": true,
+        "idempotentHint": true,
+        "openWorldHint": false
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "app_name": {
+            "type": "string",
+            "description": "Name of the Bevy app to shutdown"
+          },
+          "port": {
+            "type": "number",
+            "description": "Port number for BRP - defaults to 15702"
+          }
+        },
+        "required": [
+          "app_name"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "description": "Response status types",
+            "type": "string",
+            "enum": [
+              "success",
+              "error"
+            ]
+          },
+          "message": {
+            "type": "string"
+          },
+          "call_info": {
+            "description": "Call information for tracking tool execution",
+            "anyOf": [
+              {
+                "description": "Local tool execution (no BRP involved)",
+                "type": "object",
+                "properties": {
+                  "mcp_tool": {
+                    "description": "The MCP tool name (e.g., `brp_status`)",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "mcp_tool"
+                ]
+              },
+              {
+                "description": "BRP tool execution (calls Bevy Remote Protocol)",
+                "type": "object",
+                "properties": {
+                  "mcp_tool": {
+                    "description": "The MCP tool name (e.g., `world_spawn_entity`)",
+                    "type": "string"
+                  },
+                  "brp_method": {
+                    "description": "The BRP method name (e.g., `world.spawn_entity`)",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "mcp_tool",
+                  "brp_method"
+                ]
+              }
+            ]
+          },
+          "metadata": {},
+          "parameters": {},
+          "result": {},
+          "error_info": {},
+          "brp_extras_debug_info": {}
+        },
+        "required": [
+          "status",
+          "message",
+          "call_info"
+        ],
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "ToolCallJsonResponse",
+        "description": "Standard JSON response structure for all tools"
+      }
+    },
+    {
+      "name": "brp_status",
+      "title": "check app status",
+      "description": "Check if a Bevy app is running with BRP enabled to verify app status\n\nResponse includes:\n- status:\n    \"running_with_brp\"\n    \"running_no_brp\"\n    \"not_running\"\n- app_name\n- port\n- pid: Process ID if detected (null otherwise)\n",
+      "annotations": {
+        "title": "App: check app status",
+        "readOnlyHint": true,
+        "openWorldHint": false
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "app_name": {
+            "type": "string",
+            "description": "Name of the process to check for"
+          },
+          "port": {
+            "type": "number",
+            "description": "Port number for BRP - defaults to 15702"
+          }
+        },
+        "required": [
+          "app_name"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "description": "Response status types",
+            "type": "string",
+            "enum": [
+              "success",
+              "error"
+            ]
+          },
+          "message": {
+            "type": "string"
+          },
+          "call_info": {
+            "description": "Call information for tracking tool execution",
+            "anyOf": [
+              {
+                "description": "Local tool execution (no BRP involved)",
+                "type": "object",
+                "properties": {
+                  "mcp_tool": {
+                    "description": "The MCP tool name (e.g., `brp_status`)",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "mcp_tool"
+                ]
+              },
+              {
+                "description": "BRP tool execution (calls Bevy Remote Protocol)",
+                "type": "object",
+                "properties": {
+                  "mcp_tool": {
+                    "description": "The MCP tool name (e.g., `world_spawn_entity`)",
+                    "type": "string"
+                  },
+                  "brp_method": {
+                    "description": "The BRP method name (e.g., `world.spawn_entity`)",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "mcp_tool",
+                  "brp_method"
+                ]
+              }
+            ]
+          },
+          "metadata": {},
+          "parameters": {},
+          "result": {},
+          "error_info": {},
+          "brp_extras_debug_info": {}
+        },
+        "required": [
+          "status",
+          "message",
+          "call_info"
+        ],
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "ToolCallJsonResponse",
+        "description": "Standard JSON response structure for all tools"
+      }
+    },
+    {
+      "name": "brp_stop_watch",
+      "title": "stop watch",
+      "description": "Stops active watch subscriptions to free resources.\n\nReturns:\n- status: \"success\" or \"error\"\n- message: Result description\n\nBehavior: Stops streaming immediately, log file remains for analysis.\n\nNote: Always stop watches to free resources. Auto-stops when Bevy app shuts down.",
+      "annotations": {
+        "title": "Watch Monitoring: stop watch",
+        "readOnlyHint": false,
+        "destructiveHint": true,
+        "idempotentHint": true,
+        "openWorldHint": false
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "watch_id": {
+            "type": "number",
+            "description": "The watch ID returned from `bevy_start_entity_watch` or `bevy_start_list_watch`"
+          }
+        },
+        "required": [
+          "watch_id"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "description": "Response status types",
+            "type": "string",
+            "enum": [
+              "success",
+              "error"
+            ]
+          },
+          "message": {
+            "type": "string"
+          },
+          "call_info": {
+            "description": "Call information for tracking tool execution",
+            "anyOf": [
+              {
+                "description": "Local tool execution (no BRP involved)",
+                "type": "object",
+                "properties": {
+                  "mcp_tool": {
+                    "description": "The MCP tool name (e.g., `brp_status`)",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "mcp_tool"
+                ]
+              },
+              {
+                "description": "BRP tool execution (calls Bevy Remote Protocol)",
+                "type": "object",
+                "properties": {
+                  "mcp_tool": {
+                    "description": "The MCP tool name (e.g., `world_spawn_entity`)",
+                    "type": "string"
+                  },
+                  "brp_method": {
+                    "description": "The BRP method name (e.g., `world.spawn_entity`)",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "mcp_tool",
+                  "brp_method"
+                ]
+              }
+            ]
+          },
+          "metadata": {},
+          "parameters": {},
+          "result": {},
+          "error_info": {},
+          "brp_extras_debug_info": {}
+        },
+        "required": [
+          "status",
+          "message",
+          "call_info"
+        ],
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "ToolCallJsonResponse",
+        "description": "Standard JSON response structure for all tools"
+      }
+    },
+    {
+      "name": "brp_type_guide",
+      "title": "type guide for components and resources",
+      "description": "Provides guidance to the coding agent for working with bevy components and resources.\n\nThis tool spawn/insert/mutate information for types in your Bevy app so that your coding agent can construct the necessary JSON structures for BRP operations.\n\nReturns:\n- spawn_example / resource_example: Example JSON structure for `world.spawn_entity` operations, `world.insert_components` and `world.insert_resources` methods.\n- mutation_info: Available mutation paths for `world.mutate_components` and `world.mutate_resources` operations\n- schema_info.reflect_types: Array of reflection traits on this type (Component, Resource, Serialize, Deserialize, Default, etc.)\n- schema_info.component_info: Optional Bevy ECS metadata for registered components, including mutability, storage type, required components, and relationship kind.\n\nCheck schema_info.reflect_types array to determine type capabilities:\n- Contains \"Component\" → supports Query, Get, Spawn, Insert operations (+ Mutate if mutable fields exist)\n- Contains \"Resource\" → supports Query, Get, Insert operations (+ Mutate if mutable fields exist)\n",
+      "annotations": {
+        "title": "Discovery: type guide for components and resources",
+        "readOnlyHint": true,
+        "openWorldHint": false
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "types": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Array of fully-qualified component type names to discover formats for"
+          },
+          "port": {
+            "type": "number",
+            "description": "Port number for BRP - defaults to 15702"
+          }
+        },
+        "required": [
+          "types"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "description": "Response status types",
+            "type": "string",
+            "enum": [
+              "success",
+              "error"
+            ]
+          },
+          "message": {
+            "type": "string"
+          },
+          "call_info": {
+            "description": "Call information for tracking tool execution",
+            "anyOf": [
+              {
+                "description": "Local tool execution (no BRP involved)",
+                "type": "object",
+                "properties": {
+                  "mcp_tool": {
+                    "description": "The MCP tool name (e.g., `brp_status`)",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "mcp_tool"
+                ]
+              },
+              {
+                "description": "BRP tool execution (calls Bevy Remote Protocol)",
+                "type": "object",
+                "properties": {
+                  "mcp_tool": {
+                    "description": "The MCP tool name (e.g., `world_spawn_entity`)",
+                    "type": "string"
+                  },
+                  "brp_method": {
+                    "description": "The BRP method name (e.g., `world.spawn_entity`)",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "mcp_tool",
+                  "brp_method"
+                ]
+              }
+            ]
+          },
+          "metadata": {},
+          "parameters": {},
+          "result": {},
+          "error_info": {},
+          "brp_extras_debug_info": {}
+        },
+        "required": [
+          "status",
+          "message",
+          "call_info"
+        ],
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "ToolCallJsonResponse",
+        "description": "Standard JSON response structure for all tools"
+      }
+    },
+    {
+      "name": "registry_schema",
+      "title": "get type schemas using 'registry.schema' method",
+      "description": "Gets type schemas via `registry.schema` BRP method. Useful for understanding structures, building tools, validating data, generating docs.\n\n⚠️ WARNING: Can exceed 200k+ tokens. ALWAYS use filters.\n\nREQUIRED Filter Examples:\n- Transform only: with_crates=[\"bevy_transform\"]\n- Resources only: with_types=[\"Resource\"]\n- Game components: with_crates=[\"my_game\"], with_types=[\"Component\"]\n\nCommon crates: bevy_transform, bevy_render, bevy_pbr, bevy_sprite, bevy_ui\nCommon traits: Component, Resource, Default, Serialize\n\nReturns: Schema objects with shortPath, typePath, reflectTypes, properties\nNote: Only registered types with reflection available.\n",
+      "annotations": {
+        "title": "Discovery: get type schemas using 'registry.schema' method",
+        "readOnlyHint": true,
+        "openWorldHint": false
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "with_crates": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Include only types from these crates (e.g., [`bevy_transform`, `my_game`])"
+          },
+          "with_types": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Include only types with these reflect traits (e.g., [`Component`, `Resource`])"
+          },
+          "without_crates": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Exclude types from these crates (e.g., [`bevy_render`, `bevy_pbr`])"
+          },
+          "without_types": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Exclude types with these reflect traits (e.g., `RenderResource`)"
+          },
+          "port": {
+            "type": "number",
+            "description": "Port number for BRP - defaults to 15702"
+          }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "description": "Response status types",
+            "type": "string",
+            "enum": [
+              "success",
+              "error"
+            ]
+          },
+          "message": {
+            "type": "string"
+          },
+          "call_info": {
+            "description": "Call information for tracking tool execution",
+            "anyOf": [
+              {
+                "description": "Local tool execution (no BRP involved)",
+                "type": "object",
+                "properties": {
+                  "mcp_tool": {
+                    "description": "The MCP tool name (e.g., `brp_status`)",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "mcp_tool"
+                ]
+              },
+              {
+                "description": "BRP tool execution (calls Bevy Remote Protocol)",
+                "type": "object",
+                "properties": {
+                  "mcp_tool": {
+                    "description": "The MCP tool name (e.g., `world_spawn_entity`)",
+                    "type": "string"
+                  },
+                  "brp_method": {
+                    "description": "The BRP method name (e.g., `world.spawn_entity`)",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "mcp_tool",
+                  "brp_method"
+                ]
+              }
+            ]
+          },
+          "metadata": {},
+          "parameters": {},
+          "result": {},
+          "error_info": {},
+          "brp_extras_debug_info": {}
+        },
+        "required": [
+          "status",
+          "message",
+          "call_info"
+        ],
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "ToolCallJsonResponse",
+        "description": "Standard JSON response structure for all tools"
+      }
+    },
+    {
+      "name": "rpc_discover",
+      "title": "discover brp methods",
+      "description": "Exhaustively list BRP transport method names registered on a running Bevy app.\n\nBevy 0.19's OpenRPC entries include built-in and application-defined methods, but provide no useful\nparameter/result schemas, descriptions, or examples. For curated developer guidance and raw\nschemas, use brp_list_agent_tools, then pass the selected exact method and raw params to\nbrp_execute. Most discovered methods need not be in that curated subset.\n\nThe response also contains BRP server information when the HTTP transport provides it.\n",
+      "annotations": {
+        "title": "Discovery: discover brp methods",
+        "readOnlyHint": true,
+        "openWorldHint": false
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "port": {
+            "type": "number",
+            "description": "Port number for BRP - defaults to 15702"
+          }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "description": "Response status types",
+            "type": "string",
+            "enum": [
+              "success",
+              "error"
+            ]
+          },
+          "message": {
+            "type": "string"
+          },
+          "call_info": {
+            "description": "Call information for tracking tool execution",
+            "anyOf": [
+              {
+                "description": "Local tool execution (no BRP involved)",
+                "type": "object",
+                "properties": {
+                  "mcp_tool": {
+                    "description": "The MCP tool name (e.g., `brp_status`)",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "mcp_tool"
+                ]
+              },
+              {
+                "description": "BRP tool execution (calls Bevy Remote Protocol)",
+                "type": "object",
+                "properties": {
+                  "mcp_tool": {
+                    "description": "The MCP tool name (e.g., `world_spawn_entity`)",
+                    "type": "string"
+                  },
+                  "brp_method": {
+                    "description": "The BRP method name (e.g., `world.spawn_entity`)",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "mcp_tool",
+                  "brp_method"
+                ]
+              }
+            ]
+          },
+          "metadata": {},
+          "parameters": {},
+          "result": {},
+          "error_info": {},
+          "brp_extras_debug_info": {}
+        },
+        "required": [
+          "status",
+          "message",
+          "call_info"
+        ],
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "ToolCallJsonResponse",
+        "description": "Standard JSON response structure for all tools"
+      }
+    },
+    {
+      "name": "world_despawn_entity",
+      "title": "despawn bevy entity",
+      "description": "Despawns entities permanently via world.despawn_entity BRP method. Useful for removing game objects, cleaning up temporaries, and managing lifecycles.\n\nWARNING: Permanent operation - entity and all components removed.\nNote: Entity ID may be reused for new entities.\n",
+      "annotations": {
+        "title": "Entity: despawn bevy entity",
+        "readOnlyHint": false,
+        "destructiveHint": true,
+        "idempotentHint": true,
+        "openWorldHint": false
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "entity": {
+            "type": "number",
+            "description": "The entity ID to despawn"
+          },
+          "port": {
+            "type": "number",
+            "description": "Port number for BRP - defaults to 15702"
+          }
+        },
+        "required": [
+          "entity"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "description": "Response status types",
+            "type": "string",
+            "enum": [
+              "success",
+              "error"
+            ]
+          },
+          "message": {
+            "type": "string"
+          },
+          "call_info": {
+            "description": "Call information for tracking tool execution",
+            "anyOf": [
+              {
+                "description": "Local tool execution (no BRP involved)",
+                "type": "object",
+                "properties": {
+                  "mcp_tool": {
+                    "description": "The MCP tool name (e.g., `brp_status`)",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "mcp_tool"
+                ]
+              },
+              {
+                "description": "BRP tool execution (calls Bevy Remote Protocol)",
+                "type": "object",
+                "properties": {
+                  "mcp_tool": {
+                    "description": "The MCP tool name (e.g., `world_spawn_entity`)",
+                    "type": "string"
+                  },
+                  "brp_method": {
+                    "description": "The BRP method name (e.g., `world.spawn_entity`)",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "mcp_tool",
+                  "brp_method"
+                ]
+              }
+            ]
+          },
+          "metadata": {},
+          "parameters": {},
+          "result": {},
+          "error_info": {},
+          "brp_extras_debug_info": {}
+        },
+        "required": [
+          "status",
+          "message",
+          "call_info"
+        ],
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "ToolCallJsonResponse",
+        "description": "Standard JSON response structure for all tools"
+      }
+    },
+    {
+      "name": "world_find_entities_by_name",
+      "title": "find entities by name",
+      "description": "Discover canonical entity IDs by matching reflected Bevy Name components through standard BRP.\n\nThis MCP-local composite calls world.query directly. It requires RemotePlugin and a reflected\nbevy_ecs::name::Name component.\n\nParameters:\n- name: Case-sensitive text to match.\n- match_mode: exact (default), prefix, suffix, or contains.\n- port: BRP port, default 15702.\n\nMatch modes are explicit. Asterisks are ordinary characters and never act as wildcards.\n\nThe result contains entries with:\n- entity: canonical u64 entity ID.\n- name: complete reflected Name value.\n\nEntries are sorted by entity ID. Duplicate names return every matching entity. No matches return an\nempty list.\n\nExamples:\n- Exact: {\"name\":\"NatesList\"}\n- Prefix: {\"name\":\"Nates\",\"match_mode\":\"prefix\"}\n- Suffix: {\"name\":\"List\",\"match_mode\":\"suffix\"}\n- Contains: {\"name\":\"tesL\",\"match_mode\":\"contains\"}\n\nbrp_extras_screenshot accepts a unique exact name directly and uses this same lookup internally.\nCall this tool yourself for non-exact discovery, duplicate matches, or explicit selection, then pass\nthe returned canonical entity ID to screenshot, mutation, inspection, or watch operations. Entity\nIDs are the unambiguous identifier when names are duplicated.\n",
+      "annotations": {
+        "title": "Discovery: find entities by name",
+        "readOnlyHint": true,
+        "openWorldHint": false
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Case-sensitive text to compare with reflected Bevy `Name` components."
+          },
+          "match_mode": {
+            "type": "string",
+            "description": "How an entity's case-sensitive [`Name`] must match the requested text."
+          },
+          "port": {
+            "type": "number",
+            "description": "Port number for BRP - defaults to 15702"
+          }
+        },
+        "required": [
+          "name"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "description": "Response status types",
+            "type": "string",
+            "enum": [
+              "success",
+              "error"
+            ]
+          },
+          "message": {
+            "type": "string"
+          },
+          "call_info": {
+            "description": "Call information for tracking tool execution",
+            "anyOf": [
+              {
+                "description": "Local tool execution (no BRP involved)",
+                "type": "object",
+                "properties": {
+                  "mcp_tool": {
+                    "description": "The MCP tool name (e.g., `brp_status`)",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "mcp_tool"
+                ]
+              },
+              {
+                "description": "BRP tool execution (calls Bevy Remote Protocol)",
+                "type": "object",
+                "properties": {
+                  "mcp_tool": {
+                    "description": "The MCP tool name (e.g., `world_spawn_entity`)",
+                    "type": "string"
+                  },
+                  "brp_method": {
+                    "description": "The BRP method name (e.g., `world.spawn_entity`)",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "mcp_tool",
+                  "brp_method"
+                ]
+              }
+            ]
+          },
+          "metadata": {},
+          "parameters": {},
+          "result": {},
+          "error_info": {},
+          "brp_extras_debug_info": {}
+        },
+        "required": [
+          "status",
+          "message",
+          "call_info"
+        ],
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "ToolCallJsonResponse",
+        "description": "Standard JSON response structure for all tools"
+      }
+    },
+    {
+      "name": "world_get_components",
+      "title": "get component data",
+      "description": "Gets component data from entities via world.get_components BRP method. Useful for inspecting state and debugging.\n\nExample types: \"bevy_transform::components::transform::Transform\", \"bevy_sprite::sprite::Sprite\"\n\nNote: Requires BRP registration\n",
+      "annotations": {
+        "title": "Component: get component data",
+        "readOnlyHint": true,
+        "openWorldHint": false
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "entity": {
+            "type": "number",
+            "description": "The entity ID to get component data from"
+          },
+          "components": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Array of component types to retrieve. Each component must be a fully-qualified type name"
+          },
+          "strict": {
+            "type": "boolean",
+            "description": "If true, returns error on unknown component types (default: false)"
+          },
+          "port": {
+            "type": "number",
+            "description": "Port number for BRP - defaults to 15702"
+          }
+        },
+        "required": [
+          "entity",
+          "components"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "description": "Response status types",
+            "type": "string",
+            "enum": [
+              "success",
+              "error"
+            ]
+          },
+          "message": {
+            "type": "string"
+          },
+          "call_info": {
+            "description": "Call information for tracking tool execution",
+            "anyOf": [
+              {
+                "description": "Local tool execution (no BRP involved)",
+                "type": "object",
+                "properties": {
+                  "mcp_tool": {
+                    "description": "The MCP tool name (e.g., `brp_status`)",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "mcp_tool"
+                ]
+              },
+              {
+                "description": "BRP tool execution (calls Bevy Remote Protocol)",
+                "type": "object",
+                "properties": {
+                  "mcp_tool": {
+                    "description": "The MCP tool name (e.g., `world_spawn_entity`)",
+                    "type": "string"
+                  },
+                  "brp_method": {
+                    "description": "The BRP method name (e.g., `world.spawn_entity`)",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "mcp_tool",
+                  "brp_method"
+                ]
+              }
+            ]
+          },
+          "metadata": {},
+          "parameters": {},
+          "result": {},
+          "error_info": {},
+          "brp_extras_debug_info": {}
+        },
+        "required": [
+          "status",
+          "message",
+          "call_info"
+        ],
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "ToolCallJsonResponse",
+        "description": "Standard JSON response structure for all tools"
+      }
+    },
+    {
+      "name": "world_get_components_watch",
+      "title": "watch component changes",
+      "description": "Watches entity component changes with file logging. Useful for monitoring values, debugging state, tracking additions/removals.\n\nReturns:\n- status: \"success\" if started\n- watch_id: Use with bevy_stop_watch\n- log_path: Log file location\n\nBehavior: Creates log at /tmp/bevy_brp_mcp_watch_*, logs COMPONENT_UPDATE on changes, runs until stopped.\n\nNote: Only monitors specified components. Stop watches to free resources.\n",
+      "annotations": {
+        "title": "Watch Monitoring: watch component changes",
+        "readOnlyHint": false,
+        "destructiveHint": true,
+        "idempotentHint": false,
+        "openWorldHint": false
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "entity": {
+            "type": "number",
+            "description": "The entity ID to watch for component changes"
+          },
+          "types": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Required array of component types to watch. Must contain at least one component. Without\nthis, the watch will not detect any changes."
+          },
+          "port": {
+            "type": "number",
+            "description": "Port number for BRP - defaults to 15702"
+          }
+        },
+        "required": [
+          "entity",
+          "types"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "description": "Response status types",
+            "type": "string",
+            "enum": [
+              "success",
+              "error"
+            ]
+          },
+          "message": {
+            "type": "string"
+          },
+          "call_info": {
+            "description": "Call information for tracking tool execution",
+            "anyOf": [
+              {
+                "description": "Local tool execution (no BRP involved)",
+                "type": "object",
+                "properties": {
+                  "mcp_tool": {
+                    "description": "The MCP tool name (e.g., `brp_status`)",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "mcp_tool"
+                ]
+              },
+              {
+                "description": "BRP tool execution (calls Bevy Remote Protocol)",
+                "type": "object",
+                "properties": {
+                  "mcp_tool": {
+                    "description": "The MCP tool name (e.g., `world_spawn_entity`)",
+                    "type": "string"
+                  },
+                  "brp_method": {
+                    "description": "The BRP method name (e.g., `world.spawn_entity`)",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "mcp_tool",
+                  "brp_method"
+                ]
+              }
+            ]
+          },
+          "metadata": {},
+          "parameters": {},
+          "result": {},
+          "error_info": {},
+          "brp_extras_debug_info": {}
+        },
+        "required": [
+          "status",
+          "message",
+          "call_info"
+        ],
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "ToolCallJsonResponse",
+        "description": "Standard JSON response structure for all tools"
+      }
+    },
+    {
+      "name": "world_get_resources",
+      "title": "get resource data",
+      "description": "Gets resource data via `world.get_resources` BRP method. Useful for inspecting global state, retrieving config, and monitoring/debugging.\n\nExample names: \"bevy_time::time::Time\", \"my_game::config::GameConfig\"\n\nReturns JSON data structured per resource type.\n\nErrors: Resource not found or not registered with BRP.\nNote: Requires BRP registration and reflection traits.\n",
+      "annotations": {
+        "title": "Resource: get resource data",
+        "readOnlyHint": true,
+        "openWorldHint": false
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "resource": {
+            "type": "string",
+            "description": "The fully-qualified type name of the resource"
+          },
+          "port": {
+            "type": "number",
+            "description": "Port number for BRP - defaults to 15702"
+          }
+        },
+        "required": [
+          "resource"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "description": "Response status types",
+            "type": "string",
+            "enum": [
+              "success",
+              "error"
+            ]
+          },
+          "message": {
+            "type": "string"
+          },
+          "call_info": {
+            "description": "Call information for tracking tool execution",
+            "anyOf": [
+              {
+                "description": "Local tool execution (no BRP involved)",
+                "type": "object",
+                "properties": {
+                  "mcp_tool": {
+                    "description": "The MCP tool name (e.g., `brp_status`)",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "mcp_tool"
+                ]
+              },
+              {
+                "description": "BRP tool execution (calls Bevy Remote Protocol)",
+                "type": "object",
+                "properties": {
+                  "mcp_tool": {
+                    "description": "The MCP tool name (e.g., `world_spawn_entity`)",
+                    "type": "string"
+                  },
+                  "brp_method": {
+                    "description": "The BRP method name (e.g., `world.spawn_entity`)",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "mcp_tool",
+                  "brp_method"
+                ]
+              }
+            ]
+          },
+          "metadata": {},
+          "parameters": {},
+          "result": {},
+          "error_info": {},
+          "brp_extras_debug_info": {}
+        },
+        "required": [
+          "status",
+          "message",
+          "call_info"
+        ],
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "ToolCallJsonResponse",
+        "description": "Standard JSON response structure for all tools"
+      }
+    },
+    {
+      "name": "world_insert_components",
+      "title": "insert components",
+      "description": "Inserts/replaces components on entities via `world.insert_components` BRP method. Useful for adding behaviors, modifying capabilities, and implementing state changes.\n\nBehavior: Replaces existing components, adds new ones, preserves others.\n\nExample:\n```json\n{\n  \"entity\": 123,\n  \"components\": {\n    \"bevy_sprite::sprite::Sprite\": {\n      \"color\": {\"r\": 1.0, \"g\": 0.0, \"b\": 0.0, \"a\": 1.0}\n    }\n  }\n}\n```\n\nNote: Requires component to be registered with BRP and have the Reflect trait\n",
+      "annotations": {
+        "title": "Component: insert components",
+        "readOnlyHint": false,
+        "destructiveHint": true,
+        "idempotentHint": true,
+        "openWorldHint": false
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "entity": {
+            "type": "number",
+            "description": "The entity ID to insert components into"
+          },
+          "components": {
+            "type": "object",
+            "description": "Object containing component data to insert. Keys are component types, values are component"
+          },
+          "port": {
+            "type": "number",
+            "description": "Port number for BRP - defaults to 15702"
+          }
+        },
+        "required": [
+          "entity",
+          "components"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "description": "Response status types",
+            "type": "string",
+            "enum": [
+              "success",
+              "error"
+            ]
+          },
+          "message": {
+            "type": "string"
+          },
+          "call_info": {
+            "description": "Call information for tracking tool execution",
+            "anyOf": [
+              {
+                "description": "Local tool execution (no BRP involved)",
+                "type": "object",
+                "properties": {
+                  "mcp_tool": {
+                    "description": "The MCP tool name (e.g., `brp_status`)",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "mcp_tool"
+                ]
+              },
+              {
+                "description": "BRP tool execution (calls Bevy Remote Protocol)",
+                "type": "object",
+                "properties": {
+                  "mcp_tool": {
+                    "description": "The MCP tool name (e.g., `world_spawn_entity`)",
+                    "type": "string"
+                  },
+                  "brp_method": {
+                    "description": "The BRP method name (e.g., `world.spawn_entity`)",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "mcp_tool",
+                  "brp_method"
+                ]
+              }
+            ]
+          },
+          "metadata": {},
+          "parameters": {},
+          "result": {},
+          "error_info": {},
+          "brp_extras_debug_info": {}
+        },
+        "required": [
+          "status",
+          "message",
+          "call_info"
+        ],
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "ToolCallJsonResponse",
+        "description": "Standard JSON response structure for all tools"
+      }
+    },
+    {
+      "name": "world_insert_resources",
+      "title": "insert resources",
+      "description": "Inserts/updates resources via world.insert_resources BRP method. Useful for modifying config, injecting data, testing states, and building tools.\n\nExample:\n```json\n{\n  \"resource\": \"my_game::config::GameConfig\",\n  \"value\": {\n    \"difficulty\": \"hard\",\n    \"sound_volume\": 0.8,\n    \"graphics_quality\": \"high\"\n  }\n}\n```\n\nBehavior: Replaces existing resources, creates if missing.\nNote: Requires resource to be registered with BRP and have the Reflect trait\n",
+      "annotations": {
+        "title": "Resource: insert resources",
+        "readOnlyHint": false,
+        "destructiveHint": true,
+        "idempotentHint": true,
+        "openWorldHint": false
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "resource": {
+            "type": "string",
+            "description": "The fully-qualified type name of the resource to insert or update"
+          },
+          "value": {
+            "anyOf": [
+              {
+                "type": "object"
+              },
+              {
+                "type": "array",
+                "items": {}
+              },
+              {
+                "type": "string"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The resource value to insert."
+          },
+          "port": {
+            "type": "number",
+            "description": "Port number for BRP - defaults to 15702"
+          }
+        },
+        "required": [
+          "resource",
+          "value"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "description": "Response status types",
+            "type": "string",
+            "enum": [
+              "success",
+              "error"
+            ]
+          },
+          "message": {
+            "type": "string"
+          },
+          "call_info": {
+            "description": "Call information for tracking tool execution",
+            "anyOf": [
+              {
+                "description": "Local tool execution (no BRP involved)",
+                "type": "object",
+                "properties": {
+                  "mcp_tool": {
+                    "description": "The MCP tool name (e.g., `brp_status`)",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "mcp_tool"
+                ]
+              },
+              {
+                "description": "BRP tool execution (calls Bevy Remote Protocol)",
+                "type": "object",
+                "properties": {
+                  "mcp_tool": {
+                    "description": "The MCP tool name (e.g., `world_spawn_entity`)",
+                    "type": "string"
+                  },
+                  "brp_method": {
+                    "description": "The BRP method name (e.g., `world.spawn_entity`)",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "mcp_tool",
+                  "brp_method"
+                ]
+              }
+            ]
+          },
+          "metadata": {},
+          "parameters": {},
+          "result": {},
+          "error_info": {},
+          "brp_extras_debug_info": {}
+        },
+        "required": [
+          "status",
+          "message",
+          "call_info"
+        ],
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "ToolCallJsonResponse",
+        "description": "Standard JSON response structure for all tools"
+      }
+    },
+    {
+      "name": "world_list_components",
+      "title": "list components",
+      "description": "Lists components via `world.list_components` BRP method. Lists all registered components or components on a specific entity.\n\nUseful for discovering available types, inspecting entities, and getting fully-qualified names.\n",
+      "annotations": {
+        "title": "Component: list components",
+        "readOnlyHint": true,
+        "openWorldHint": false
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "entity": {
+            "type": "number",
+            "description": "Optional entity ID to list components for - to list all types, do not pass entity parameter"
+          },
+          "port": {
+            "type": "number",
+            "description": "Port number for BRP - defaults to 15702"
+          }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "description": "Response status types",
+            "type": "string",
+            "enum": [
+              "success",
+              "error"
+            ]
+          },
+          "message": {
+            "type": "string"
+          },
+          "call_info": {
+            "description": "Call information for tracking tool execution",
+            "anyOf": [
+              {
+                "description": "Local tool execution (no BRP involved)",
+                "type": "object",
+                "properties": {
+                  "mcp_tool": {
+                    "description": "The MCP tool name (e.g., `brp_status`)",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "mcp_tool"
+                ]
+              },
+              {
+                "description": "BRP tool execution (calls Bevy Remote Protocol)",
+                "type": "object",
+                "properties": {
+                  "mcp_tool": {
+                    "description": "The MCP tool name (e.g., `world_spawn_entity`)",
+                    "type": "string"
+                  },
+                  "brp_method": {
+                    "description": "The BRP method name (e.g., `world.spawn_entity`)",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "mcp_tool",
+                  "brp_method"
+                ]
+              }
+            ]
+          },
+          "metadata": {},
+          "parameters": {},
+          "result": {},
+          "error_info": {},
+          "brp_extras_debug_info": {}
+        },
+        "required": [
+          "status",
+          "message",
+          "call_info"
+        ],
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "ToolCallJsonResponse",
+        "description": "Standard JSON response structure for all tools"
+      }
+    },
+    {
+      "name": "world_list_components_watch",
+      "title": "watch component list",
+      "description": "Watches entity component list changes (additions/removals) with file logging. Useful for monitoring lifecycle, debugging transitions.\n\nReturns:\n- status: \"success\" if started\n- watch_id: Use with bevy_stop_watch\n- log_path: Log file location\n\nBehavior: Creates log at /tmp/bevy_brp_mcp_watch_*, logs COMPONENT_UPDATE entries, runs until stopped.\n\nNote: Tracks structural changes, not value changes.",
+      "annotations": {
+        "title": "Watch Monitoring: watch component list",
+        "readOnlyHint": false,
+        "destructiveHint": true,
+        "idempotentHint": false,
+        "openWorldHint": false
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "entity": {
+            "type": "number",
+            "description": "The entity ID to watch for component list changes"
+          },
+          "port": {
+            "type": "number",
+            "description": "Port number for BRP - defaults to 15702"
+          }
+        },
+        "required": [
+          "entity"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "description": "Response status types",
+            "type": "string",
+            "enum": [
+              "success",
+              "error"
+            ]
+          },
+          "message": {
+            "type": "string"
+          },
+          "call_info": {
+            "description": "Call information for tracking tool execution",
+            "anyOf": [
+              {
+                "description": "Local tool execution (no BRP involved)",
+                "type": "object",
+                "properties": {
+                  "mcp_tool": {
+                    "description": "The MCP tool name (e.g., `brp_status`)",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "mcp_tool"
+                ]
+              },
+              {
+                "description": "BRP tool execution (calls Bevy Remote Protocol)",
+                "type": "object",
+                "properties": {
+                  "mcp_tool": {
+                    "description": "The MCP tool name (e.g., `world_spawn_entity`)",
+                    "type": "string"
+                  },
+                  "brp_method": {
+                    "description": "The BRP method name (e.g., `world.spawn_entity`)",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "mcp_tool",
+                  "brp_method"
+                ]
+              }
+            ]
+          },
+          "metadata": {},
+          "parameters": {},
+          "result": {},
+          "error_info": {},
+          "brp_extras_debug_info": {}
+        },
+        "required": [
+          "status",
+          "message",
+          "call_info"
+        ],
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "ToolCallJsonResponse",
+        "description": "Standard JSON response structure for all tools"
+      }
+    },
+    {
+      "name": "world_list_resources",
+      "title": "list resources",
+      "description": "Lists all registered resources via `world.list_resources` BRP method. Useful for discovering resources, debugging registration, and understanding architecture.\n\nReturns array of fully-qualified resource type names like \"bevy_time::time::Time\", \"bevy_window::window::Windows\".\n\nNote: Only BRP-registered resources with reflection traits appear.\n",
+      "annotations": {
+        "title": "Resource: list resources",
+        "readOnlyHint": true,
+        "openWorldHint": false
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "port": {
+            "type": "number",
+            "description": "Port number for BRP - defaults to 15702"
+          }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "description": "Response status types",
+            "type": "string",
+            "enum": [
+              "success",
+              "error"
+            ]
+          },
+          "message": {
+            "type": "string"
+          },
+          "call_info": {
+            "description": "Call information for tracking tool execution",
+            "anyOf": [
+              {
+                "description": "Local tool execution (no BRP involved)",
+                "type": "object",
+                "properties": {
+                  "mcp_tool": {
+                    "description": "The MCP tool name (e.g., `brp_status`)",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "mcp_tool"
+                ]
+              },
+              {
+                "description": "BRP tool execution (calls Bevy Remote Protocol)",
+                "type": "object",
+                "properties": {
+                  "mcp_tool": {
+                    "description": "The MCP tool name (e.g., `world_spawn_entity`)",
+                    "type": "string"
+                  },
+                  "brp_method": {
+                    "description": "The BRP method name (e.g., `world.spawn_entity`)",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "mcp_tool",
+                  "brp_method"
+                ]
+              }
+            ]
+          },
+          "metadata": {},
+          "parameters": {},
+          "result": {},
+          "error_info": {},
+          "brp_extras_debug_info": {}
+        },
+        "required": [
+          "status",
+          "message",
+          "call_info"
+        ],
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "ToolCallJsonResponse",
+        "description": "Standard JSON response structure for all tools"
+      }
+    },
+    {
+      "name": "world_mutate_components",
+      "title": "mutate components",
+      "description": "Mutates component fields via `world.mutate_components` BRP method. Updates specific fields without replacing entire component.\n\nPath syntax:\n- Root replacement: \"\" (empty string to replace entire component)\n- Nested: \".transform.translation.x\"\n- Arrays: \".points[2]\"\n- Tuples: \".0\", \".1\"\n- Leading dot required for field paths\n\nExample:\n```json\n{\n  \"entity\": 123,\n  \"component\": \"bevy_transform::components::transform::Transform\",\n  \"path\": \".translation.y\",\n  \"value\": 10.5\n}\n```\n\nBenefits: Preserves other fields, efficient for updates, ideal for animation.\n\nErrors: Entity/component not found, invalid path, type mismatch.\nNote: Requires BRP registration and reflection.\n",
+      "annotations": {
+        "title": "Component: mutate components",
+        "readOnlyHint": false,
+        "destructiveHint": true,
+        "idempotentHint": true,
+        "openWorldHint": false
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "entity": {
+            "type": "number",
+            "description": "The entity ID containing the component to mutate"
+          },
+          "component": {
+            "type": "string",
+            "description": "The fully-qualified type name of the component to mutate"
+          },
+          "value": {
+            "anyOf": [
+              {
+                "type": "object"
+              },
+              {
+                "type": "array",
+                "items": {}
+              },
+              {
+                "type": "string"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The new value for the mutation path"
+          },
+          "path": {
+            "type": "string",
+            "description": "The path to the field within the component (e.g., 'translation.x')"
+          },
+          "port": {
+            "type": "number",
+            "description": "Port number for BRP - defaults to 15702"
+          }
+        },
+        "required": [
+          "entity",
+          "component",
+          "value"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "description": "Response status types",
+            "type": "string",
+            "enum": [
+              "success",
+              "error"
+            ]
+          },
+          "message": {
+            "type": "string"
+          },
+          "call_info": {
+            "description": "Call information for tracking tool execution",
+            "anyOf": [
+              {
+                "description": "Local tool execution (no BRP involved)",
+                "type": "object",
+                "properties": {
+                  "mcp_tool": {
+                    "description": "The MCP tool name (e.g., `brp_status`)",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "mcp_tool"
+                ]
+              },
+              {
+                "description": "BRP tool execution (calls Bevy Remote Protocol)",
+                "type": "object",
+                "properties": {
+                  "mcp_tool": {
+                    "description": "The MCP tool name (e.g., `world_spawn_entity`)",
+                    "type": "string"
+                  },
+                  "brp_method": {
+                    "description": "The BRP method name (e.g., `world.spawn_entity`)",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "mcp_tool",
+                  "brp_method"
+                ]
+              }
+            ]
+          },
+          "metadata": {},
+          "parameters": {},
+          "result": {},
+          "error_info": {},
+          "brp_extras_debug_info": {}
+        },
+        "required": [
+          "status",
+          "message",
+          "call_info"
+        ],
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "ToolCallJsonResponse",
+        "description": "Standard JSON response structure for all tools"
+      }
+    },
+    {
+      "name": "world_mutate_resources",
+      "title": "mutate resources",
+      "description": "Mutates resource fields via world.mutate_resources BRP method. Updates specific fields without replacing entire resource.\n\nPath syntax:\n- Root replacement: \"\" (empty string to replace entire resource)\n- Nested: \".config.graphics.resolution\"\n- Arrays: \".items[0]\"\n- Maps: \".scores['player1']\"\n- Tuples: \".0\", \".1\"\n- Leading dot required for field paths\n\nExample:\n```json\n{\n  \"resource\": \"my_game::config::GameConfig\",\n  \"path\": \".settings.sound.volume\",\n  \"value\": 0.5\n}\n```\n\nBenefits: Preserves other fields, efficient for large resources, safer for concurrent mods.\nNote: Requires reflection support.\n",
+      "annotations": {
+        "title": "Resource: mutate resources",
+        "readOnlyHint": false,
+        "destructiveHint": true,
+        "idempotentHint": true,
+        "openWorldHint": false
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "resource": {
+            "type": "string",
+            "description": "The fully-qualified type name of the resource to mutate"
+          },
+          "value": {
+            "anyOf": [
+              {
+                "type": "object"
+              },
+              {
+                "type": "array",
+                "items": {}
+              },
+              {
+                "type": "string"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The new value for the field."
+          },
+          "path": {
+            "type": "string",
+            "description": "The mutation path to the field within the resource (e.g., 'settings.volume')"
+          },
+          "port": {
+            "type": "number",
+            "description": "Port number for BRP - defaults to 15702"
+          }
+        },
+        "required": [
+          "resource",
+          "value"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "description": "Response status types",
+            "type": "string",
+            "enum": [
+              "success",
+              "error"
+            ]
+          },
+          "message": {
+            "type": "string"
+          },
+          "call_info": {
+            "description": "Call information for tracking tool execution",
+            "anyOf": [
+              {
+                "description": "Local tool execution (no BRP involved)",
+                "type": "object",
+                "properties": {
+                  "mcp_tool": {
+                    "description": "The MCP tool name (e.g., `brp_status`)",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "mcp_tool"
+                ]
+              },
+              {
+                "description": "BRP tool execution (calls Bevy Remote Protocol)",
+                "type": "object",
+                "properties": {
+                  "mcp_tool": {
+                    "description": "The MCP tool name (e.g., `world_spawn_entity`)",
+                    "type": "string"
+                  },
+                  "brp_method": {
+                    "description": "The BRP method name (e.g., `world.spawn_entity`)",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "mcp_tool",
+                  "brp_method"
+                ]
+              }
+            ]
+          },
+          "metadata": {},
+          "parameters": {},
+          "result": {},
+          "error_info": {},
+          "brp_extras_debug_info": {}
+        },
+        "required": [
+          "status",
+          "message",
+          "call_info"
+        ],
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "ToolCallJsonResponse",
+        "description": "Standard JSON response structure for all tools"
+      }
+    },
+    {
+      "name": "world_query",
+      "title": "query entities/components",
+      "description": "Queries entities via world.query BRP method. Searches entities by components, applies filters, returns data.\n\n## How to Call\n\n```\nmcp__brp__world_query(data={}, filter={\"with\": [\"bevy_transform::components::transform::Transform\"]})\n```\n\n**IMPORTANT**: Pass parameters as objects, NOT strings. Use `filter={\"with\": [...]}` NOT `filter='{\"with\": [...]}'`\n\n### notes on data parameter\n**REQUIRED** - Specifies what components to retrieve from matching entities.\n```json\n{\n  \"components\": [\"bevy_transform::components::transform::Transform\"],\n  \"option\": [\"bevy_sprite::sprite::Sprite\"],  // or \"all\" to get all components\n  \"has\": [\"bevy_render::camera::camera::Camera\"]\n}\n```\n\n**Special case**: Use `\"data\": {}` to get only entity IDs without any component data.\n\nFields (all optional within the data object):\n- `components`: Array of components to always retrieve (query fails if not present)\n- `option`: Components to retrieve if present (optional components). Can be:\n  - Array of component paths: `[\"bevy_sprite::sprite::Sprite\", \"bevy_transform::components::transform::Transform\"]`\n  - `\"all\"` to select all components on matching entities\n- `has`: Array of components to check existence (returns true/false, not the data)\n\n### notes on filter parameter\nSpecifies which entities to include based on whether they have specified components:\n```json\n{\n  \"with\": [\"bevy_transform::components::transform::Transform\", \"bevy_render::camera::camera::Camera\"],\n  \"without\": [\"bevy_ui::node::Node\"]\n}\n```\n\nFields:\n- `with`: Array of components that entities must have\n- `without`: Array of components that entities must NOT have\n\n## Examples\n\nQuery entity IDs only for all entities with Transform (no component data):\n```json\n{\n  \"data\": {},\n  \"filter\": {\n    \"with\": [\"bevy_transform::components::transform::Transform\"]\n  }\n}\n```\n\nGet Transform and optional Sprite from all cameras:\n```json\n{\n  \"data\": {\n    \"components\": [\"bevy_transform::components::transform::Transform\"],\n    \"option\": [\"bevy_sprite::sprite::Sprite\"]\n  },\n  \"filter\": {\n    \"with\": [\"bevy_render::camera::camera::Camera\"]\n  }\n}\n```\n\nFind entities with Sprite but without UI nodes (entity IDs only):\n```json\n{\n  \"data\": {},\n  \"filter\": {\n    \"with\": [\"bevy_sprite::sprite::Sprite\"],\n    \"without\": [\"bevy_ui::node::Node\"]\n  }\n}\n```\n\nGet all components from entities with Transform:\n```json\n{\n  \"data\": {\n    \"option\": \"all\"\n  },\n  \"filter\": {\n    \"with\": [\"bevy_transform::components::transform::Transform\"]\n  }\n}\n```\n\n## Notes\n- Component type names must be fully-qualified (e.g., `bevy_transform::components::transform::Transform`)\n- Requires components to be registered with BRP reflection\n",
+      "annotations": {
+        "title": "Component: query entities/components",
+        "readOnlyHint": true,
+        "openWorldHint": false
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "object",
+            "description": "Query data specification - what component data to retrieve"
+          },
+          "filter": {
+            "type": "object",
+            "description": "Object specifying which entities to query. Optional. Structure: {with: string[],\nwithout: string[]}. Defaults to {} (no filter) if omitted."
+          },
+          "strict": {
+            "type": "boolean",
+            "description": "If true, returns error on unknown component types (default: false)"
+          },
+          "port": {
+            "type": "number",
+            "description": "Port number for BRP - defaults to 15702"
+          }
+        },
+        "required": [
+          "data"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "description": "Response status types",
+            "type": "string",
+            "enum": [
+              "success",
+              "error"
+            ]
+          },
+          "message": {
+            "type": "string"
+          },
+          "call_info": {
+            "description": "Call information for tracking tool execution",
+            "anyOf": [
+              {
+                "description": "Local tool execution (no BRP involved)",
+                "type": "object",
+                "properties": {
+                  "mcp_tool": {
+                    "description": "The MCP tool name (e.g., `brp_status`)",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "mcp_tool"
+                ]
+              },
+              {
+                "description": "BRP tool execution (calls Bevy Remote Protocol)",
+                "type": "object",
+                "properties": {
+                  "mcp_tool": {
+                    "description": "The MCP tool name (e.g., `world_spawn_entity`)",
+                    "type": "string"
+                  },
+                  "brp_method": {
+                    "description": "The BRP method name (e.g., `world.spawn_entity`)",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "mcp_tool",
+                  "brp_method"
+                ]
+              }
+            ]
+          },
+          "metadata": {},
+          "parameters": {},
+          "result": {},
+          "error_info": {},
+          "brp_extras_debug_info": {}
+        },
+        "required": [
+          "status",
+          "message",
+          "call_info"
+        ],
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "ToolCallJsonResponse",
+        "description": "Standard JSON response structure for all tools"
+      }
+    },
+    {
+      "name": "world_remove_components",
+      "title": "remove components",
+      "description": "Removes components from entities via world.remove_componentsBRP method. Useful for removing behaviors, implementing state machines, and optimizing entities.\n\nExample:\n```json\n{\n  \"entity\": 123,\n  \"components\": [\n    \"bevy_sprite::sprite::Sprite\",\n    \"bevy_render::camera::camera::Camera\"\n  ]\n}\n```\n\nNotes:\n- Removing non-existent components isn't an error\n- Entity persists even if all components removed\n- Use world_despawn_entity to remove entity entirely\n",
+      "annotations": {
+        "title": "Component: remove components",
+        "readOnlyHint": false,
+        "destructiveHint": true,
+        "idempotentHint": true,
+        "openWorldHint": false
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "entity": {
+            "type": "number",
+            "description": "The entity ID to remove components from"
+          },
+          "components": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Array of component type names to remove"
+          },
+          "port": {
+            "type": "number",
+            "description": "Port number for BRP - defaults to 15702"
+          }
+        },
+        "required": [
+          "entity",
+          "components"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "description": "Response status types",
+            "type": "string",
+            "enum": [
+              "success",
+              "error"
+            ]
+          },
+          "message": {
+            "type": "string"
+          },
+          "call_info": {
+            "description": "Call information for tracking tool execution",
+            "anyOf": [
+              {
+                "description": "Local tool execution (no BRP involved)",
+                "type": "object",
+                "properties": {
+                  "mcp_tool": {
+                    "description": "The MCP tool name (e.g., `brp_status`)",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "mcp_tool"
+                ]
+              },
+              {
+                "description": "BRP tool execution (calls Bevy Remote Protocol)",
+                "type": "object",
+                "properties": {
+                  "mcp_tool": {
+                    "description": "The MCP tool name (e.g., `world_spawn_entity`)",
+                    "type": "string"
+                  },
+                  "brp_method": {
+                    "description": "The BRP method name (e.g., `world.spawn_entity`)",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "mcp_tool",
+                  "brp_method"
+                ]
+              }
+            ]
+          },
+          "metadata": {},
+          "parameters": {},
+          "result": {},
+          "error_info": {},
+          "brp_extras_debug_info": {}
+        },
+        "required": [
+          "status",
+          "message",
+          "call_info"
+        ],
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "ToolCallJsonResponse",
+        "description": "Standard JSON response structure for all tools"
+      }
+    },
+    {
+      "name": "world_remove_resources",
+      "title": "remove resources",
+      "description": "Removes resources via world.remove_resources BRP method. Useful for cleanup, resetting state, testing dependencies, and managing lifecycle.\n\nExample:\n```json\n{\n  \"resource\": \"my_game::config::TemporaryCache\"\n}\n```\n\nWARNING: May break dependent systems. Immediate and irreversible.\nNote: Removing non-existent resources isn't an error.\n",
+      "annotations": {
+        "title": "Resource: remove resources",
+        "readOnlyHint": false,
+        "destructiveHint": true,
+        "idempotentHint": true,
+        "openWorldHint": false
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "resource": {
+            "type": "string",
+            "description": "The fully-qualified type name of the resource to remove"
+          },
+          "port": {
+            "type": "number",
+            "description": "Port number for BRP - defaults to 15702"
+          }
+        },
+        "required": [
+          "resource"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "description": "Response status types",
+            "type": "string",
+            "enum": [
+              "success",
+              "error"
+            ]
+          },
+          "message": {
+            "type": "string"
+          },
+          "call_info": {
+            "description": "Call information for tracking tool execution",
+            "anyOf": [
+              {
+                "description": "Local tool execution (no BRP involved)",
+                "type": "object",
+                "properties": {
+                  "mcp_tool": {
+                    "description": "The MCP tool name (e.g., `brp_status`)",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "mcp_tool"
+                ]
+              },
+              {
+                "description": "BRP tool execution (calls Bevy Remote Protocol)",
+                "type": "object",
+                "properties": {
+                  "mcp_tool": {
+                    "description": "The MCP tool name (e.g., `world_spawn_entity`)",
+                    "type": "string"
+                  },
+                  "brp_method": {
+                    "description": "The BRP method name (e.g., `world.spawn_entity`)",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "mcp_tool",
+                  "brp_method"
+                ]
+              }
+            ]
+          },
+          "metadata": {},
+          "parameters": {},
+          "result": {},
+          "error_info": {},
+          "brp_extras_debug_info": {}
+        },
+        "required": [
+          "status",
+          "message",
+          "call_info"
+        ],
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "ToolCallJsonResponse",
+        "description": "Standard JSON response structure for all tools"
+      }
+    },
+    {
+      "name": "world_reparent_entities",
+      "title": "reparent entities",
+      "description": "Changes entity parents via world.reparent_entities BRP method. Useful for reorganizing hierarchies, drag-and-drop, scene graphs, and dynamic attachment.\n\nExamples:\n```json\n{\"entities\": [123, 124, 125], \"parent\": 100}\n```\nRemove parent:\n```json\n{\"entities\": [123, 124, 125]}\n```\n\nBehavior: Replaces parent relationships, updates transform hierarchies.\nNotes: Parent must exist, no circular hierarchies allowed.\nImportant: Entities need Transform components for spatial hierarchies.\n",
+      "annotations": {
+        "title": "Entity: reparent entities",
+        "readOnlyHint": false,
+        "destructiveHint": true,
+        "idempotentHint": true,
+        "openWorldHint": false
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "entities": {
+            "type": "array",
+            "items": {
+              "type": "number"
+            },
+            "description": "Array of entity IDs to reparent"
+          },
+          "parent": {
+            "type": "number",
+            "description": "The new parent entity ID (omit to remove parent)"
+          },
+          "port": {
+            "type": "number",
+            "description": "Port number for BRP - defaults to 15702"
+          }
+        },
+        "required": [
+          "entities"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "description": "Response status types",
+            "type": "string",
+            "enum": [
+              "success",
+              "error"
+            ]
+          },
+          "message": {
+            "type": "string"
+          },
+          "call_info": {
+            "description": "Call information for tracking tool execution",
+            "anyOf": [
+              {
+                "description": "Local tool execution (no BRP involved)",
+                "type": "object",
+                "properties": {
+                  "mcp_tool": {
+                    "description": "The MCP tool name (e.g., `brp_status`)",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "mcp_tool"
+                ]
+              },
+              {
+                "description": "BRP tool execution (calls Bevy Remote Protocol)",
+                "type": "object",
+                "properties": {
+                  "mcp_tool": {
+                    "description": "The MCP tool name (e.g., `world_spawn_entity`)",
+                    "type": "string"
+                  },
+                  "brp_method": {
+                    "description": "The BRP method name (e.g., `world.spawn_entity`)",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "mcp_tool",
+                  "brp_method"
+                ]
+              }
+            ]
+          },
+          "metadata": {},
+          "parameters": {},
+          "result": {},
+          "error_info": {},
+          "brp_extras_debug_info": {}
+        },
+        "required": [
+          "status",
+          "message",
+          "call_info"
+        ],
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "ToolCallJsonResponse",
+        "description": "Standard JSON response structure for all tools"
+      }
+    },
+    {
+      "name": "world_spawn_entity",
+      "title": "spawn entity",
+      "description": "Spawns entities with components via world.spawn_entity BRP method. Useful for creating game objects, testing configurations, and building editors.\n\nExample:\n```json\n{\n  \"components\": {\n    \"bevy_transform::components::transform::Transform\": {\n      \"translation\": {\"x\": 10.0, \"y\": 20.0, \"z\": 0.0},\n      \"rotation\": {\"x\": 0.0, \"y\": 0.0, \"z\": 0.0, \"w\": 1.0},\n      \"scale\": {\"x\": 1.0, \"y\": 1.0, \"z\": 1.0}\n    }\n  }\n}\n```\n\nReturns: New entity ID\nNote: Requires component to be registered with BRP and have the Reflect trait\n",
+      "annotations": {
+        "title": "Entity: spawn entity",
+        "readOnlyHint": false,
+        "destructiveHint": true,
+        "idempotentHint": false,
+        "openWorldHint": false
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "components": {
+            "type": "object",
+            "description": "Object containing component data to spawn with. Keys are component types, values are\ncomponent data."
+          },
+          "port": {
+            "type": "number",
+            "description": "Port number for BRP - defaults to 15702"
+          }
+        },
+        "required": [
+          "components"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "description": "Response status types",
+            "type": "string",
+            "enum": [
+              "success",
+              "error"
+            ]
+          },
+          "message": {
+            "type": "string"
+          },
+          "call_info": {
+            "description": "Call information for tracking tool execution",
+            "anyOf": [
+              {
+                "description": "Local tool execution (no BRP involved)",
+                "type": "object",
+                "properties": {
+                  "mcp_tool": {
+                    "description": "The MCP tool name (e.g., `brp_status`)",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "mcp_tool"
+                ]
+              },
+              {
+                "description": "BRP tool execution (calls Bevy Remote Protocol)",
+                "type": "object",
+                "properties": {
+                  "mcp_tool": {
+                    "description": "The MCP tool name (e.g., `world_spawn_entity`)",
+                    "type": "string"
+                  },
+                  "brp_method": {
+                    "description": "The BRP method name (e.g., `world.spawn_entity`)",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "mcp_tool",
+                  "brp_method"
+                ]
+              }
+            ]
+          },
+          "metadata": {},
+          "parameters": {},
+          "result": {},
+          "error_info": {},
+          "brp_extras_debug_info": {}
+        },
+        "required": [
+          "status",
+          "message",
+          "call_info"
+        ],
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "ToolCallJsonResponse",
+        "description": "Standard JSON response structure for all tools"
+      }
+    },
+    {
+      "name": "world_trigger_event",
+      "title": "trigger event",
+      "description": "Triggers an event in the Bevy world. This allows remote triggering of game events like spawning enemies, changing game state, or triggering cutscenes.\n\n## Requirements\n\nEvents must be registered with reflection to be triggerable:\n\n```rust\n#[derive(Event, Reflect)]\n#[reflect(Event)]\npub struct SpawnEnemy {\n    pub enemy_type: String,\n    pub position: Vec3,\n}\n\n// In your app setup:\napp.register_type::<SpawnEnemy>();\n```\n\n## Parameters\n\n| Parameter | Type | Required | Description |\n|-----------|------|----------|-------------|\n| `event` | string | Yes | Full type path of the event (e.g., \"my_game::SpawnEnemy\") |\n| `value` | object | No | Event payload as JSON. Omit for unit events (events with no data). |\n| `port` | number | No | BRP port (default: 15702) |\n\n## Examples\n\n### Unit Event (no payload)\n\nTrigger a simple event with no data:\n\n```json\n{\n  \"event\": \"my_game::events::PauseGame\"\n}\n```\n\n### Event with Payload\n\nTrigger an event with structured data:\n\n```json\n{\n  \"event\": \"my_game::events::SpawnEnemy\",\n  \"value\": {\n    \"enemy_type\": \"goblin\",\n    \"position\": [10.0, 0.0, 5.0]\n  }\n}\n```\n\n### Event with Entity Reference\n\nEvents can reference entities:\n\n```json\n{\n  \"event\": \"my_game::events::DamageEntity\",\n  \"value\": {\n    \"target\": 4294967299,\n    \"amount\": 50\n  }\n}\n```\n\n## Error Handling\n\n| Error | Cause |\n|-------|-------|\n| \"Unknown event type\" | Event type not registered in the type registry |\n| \"Event is not reflectable\" | Event missing `#[reflect(Event)]` attribute |\n| \"is invalid\" | Payload doesn't match expected event structure |\n\n## Notes\n\n- Events are triggered globally via `World::trigger()`, not targeted at specific entities\n- The event must have `#[reflect(Event)]` to be discoverable and triggerable\n- Use `brp_type_guide` or `registry_schema` to discover available event types\n",
+      "annotations": {
+        "title": "Event: trigger event",
+        "readOnlyHint": false,
+        "destructiveHint": true,
+        "idempotentHint": false,
+        "openWorldHint": false
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "event": {
+            "type": "string",
+            "description": "The full type path of the event to trigger (e.g., \"`my_game::events::SpawnEnemy`\")"
+          },
+          "value": {
+            "type": "object",
+            "description": "The event payload as JSON. Omit for unit events (events with no data)."
+          },
+          "port": {
+            "type": "number",
+            "description": "Port number for BRP - defaults to 15702"
+          }
+        },
+        "required": [
+          "event"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "description": "Response status types",
+            "type": "string",
+            "enum": [
+              "success",
+              "error"
+            ]
+          },
+          "message": {
+            "type": "string"
+          },
+          "call_info": {
+            "description": "Call information for tracking tool execution",
+            "anyOf": [
+              {
+                "description": "Local tool execution (no BRP involved)",
+                "type": "object",
+                "properties": {
+                  "mcp_tool": {
+                    "description": "The MCP tool name (e.g., `brp_status`)",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "mcp_tool"
+                ]
+              },
+              {
+                "description": "BRP tool execution (calls Bevy Remote Protocol)",
+                "type": "object",
+                "properties": {
+                  "mcp_tool": {
+                    "description": "The MCP tool name (e.g., `world_spawn_entity`)",
+                    "type": "string"
+                  },
+                  "brp_method": {
+                    "description": "The BRP method name (e.g., `world.spawn_entity`)",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "mcp_tool",
+                  "brp_method"
+                ]
+              }
+            ]
+          },
+          "metadata": {},
+          "parameters": {},
+          "result": {},
+          "error_info": {},
+          "brp_extras_debug_info": {}
+        },
+        "required": [
+          "status",
+          "message",
+          "call_info"
+        ],
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "ToolCallJsonResponse",
+        "description": "Standard JSON response structure for all tools"
+      }
+    }
+  ]
+}
