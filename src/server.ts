@@ -1,6 +1,6 @@
 import { McpServer } from '@modelcontextprotocol/server';
 import { createServices, type BevyMcpServices } from './services.js';
-import { registerDirectTools, registerDiscoveryTools } from './tools/register.js';
+import { registerDirectTools, registerDiscoveryTools, registerTypeGuideTools } from './tools/register.js';
 
 /** The owned MCP server plus the shared services its tools use. */
 export interface OwnedServer {
@@ -22,5 +22,6 @@ export function createOwnedServer(): OwnedServer {
   });
   registerDirectTools(server, services, services.catalog);
   registerDiscoveryTools(server, services, services.catalog);
+  registerTypeGuideTools(server, services, services.catalog);
   return { server, services };
 }

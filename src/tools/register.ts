@@ -12,6 +12,7 @@ import { RESOURCE_DIRECT } from './resources.js';
 import { WORLD_DIRECT } from './world.js';
 import { findEntitiesByNameHandler } from './discovery.js';
 import { executeHandler, listAgentToolsHandler } from './agent-tools.js';
+import { allTypeGuidesHandler, typeGuideHandler } from './type-guides/index.js';
 
 /** Handler for an owned tool: receives the raw MCP call arguments. */
 export type OwnedToolHandler = (args: Record<string, unknown>) => Promise<CallToolResult>;
@@ -105,4 +106,17 @@ export function registerDiscoveryTools(
   registerOwnedTool(server, catalog, 'world_find_entities_by_name', findEntitiesByNameHandler(services));
   registerOwnedTool(server, catalog, 'brp_execute', executeHandler(services));
   registerOwnedTool(server, catalog, 'brp_list_agent_tools', listAgentToolsHandler(services));
+}
+
+/**
+ * Register the two public type-guide tools. Both resolve against one live
+ * `registry.schema` fetch per call; guides are built from that single dataset.
+ */
+export function registerTypeGuideTools(
+  server: McpServer,
+  services: BevyMcpServices,
+  catalog: ToolContractCatalog,
+): void {
+  registerOwnedTool(server, catalog, 'brp_type_guide', typeGuideHandler(services));
+  registerOwnedTool(server, catalog, 'brp_all_type_guides', allTypeGuidesHandler(services));
 }

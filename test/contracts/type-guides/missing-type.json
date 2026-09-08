@@ -1,0 +1,35 @@
+{
+  "status": "success",
+  "message": "Discovered 0 type(s)",
+  "call_info": {
+    "mcp_tool": "brp_type_guide"
+  },
+  "metadata": {
+    "type_count": 0
+  },
+  "parameters": {
+    "types": [
+      "nonexistent::Missing::Type"
+    ],
+    "port": 15702
+  },
+  "result": {
+    "discovered_count": 0,
+    "requested_types": [
+      "nonexistent::Missing::Type"
+    ],
+    "summary": {
+      "failed_discoveries": 1,
+      "successful_discoveries": 0,
+      "total_requested": 1
+    },
+    "type_guide": {
+      "nonexistent::Missing::Type": {
+        "type_name": "nonexistent::Missing::Type",
+        "in_registry": false,
+        "agent_guidance": "The 'mutation_paths' field provides valid 'path' arguments for 'mcp__brp__world_mutate_components' and 'mcp__brp__world_mutate_resources' tools, with example values suitable for testing.",
+        "error": "Type not found in registry"
+      }
+    }
+  }
+}
