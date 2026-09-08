@@ -6,10 +6,24 @@ use bevy_mcp_bridge::BevyMcpPlugin;
 #[reflect(Component)]
 struct FixtureMarker;
 
+#[derive(Component, Reflect, Default)]
+#[reflect(Component)]
+struct FixtureValue {
+    value: i32,
+}
+
+#[derive(Component, Reflect)]
+#[reflect(Component)]
+enum FixtureMode {
+    Idle,
+    Moving { speed: f32 },
+}
+
 #[derive(Resource, Reflect, Default)]
 #[reflect(Resource)]
 struct FixtureState {
     elapsed: f32,
+    counter: i32,
 }
 
 fn observe_virtual_time(time: Res<Time<Virtual>>, mut state: ResMut<FixtureState>) {
@@ -22,6 +36,8 @@ fn main() {
     app.add_plugins(BevyMcpPlugin);
 
     app.register_type::<FixtureMarker>();
+    app.register_type::<FixtureValue>();
+    app.register_type::<FixtureMode>();
     app.register_type::<FixtureState>();
     app.init_resource::<FixtureState>();
     app.add_systems(Update, observe_virtual_time);
@@ -45,6 +61,9 @@ fn main() {
     ));
     app.world_mut().spawn((
         FixtureMarker,
+        Name::new("FixturePrimary"),
+        FixtureValue { value: 1 },
+        FixtureMode::Moving { speed: 2.0 },
         Mesh3d(sphere),
         MeshMaterial3d(material),
         Transform::default(),

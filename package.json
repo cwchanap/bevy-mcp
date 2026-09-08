@@ -21,6 +21,7 @@
     "build": "npm run typecheck && tsc -p tsconfig.build.json",
     "test": "tsc -p tsconfig.test.json && node --test .test-build/test/*.test.js",
     "test:integration": "npm run build && node scripts/integration.mjs",
+    "smoke:name": "npm run build && node scripts/integration-name-smoke.mjs",
     "smoke:packed": "node scripts/smoke-packed-cli.mjs",
     "prepare": "npm run build",
     "typecheck": "tsc --noEmit",
