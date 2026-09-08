@@ -2,74 +2,108 @@
 
 ## Status
 
-Approved on September 7, 2026 and revised after design review on the same date. This design supersedes `docs/superpowers/specs/2026-09-03-generic-bevy-mcp-design.md`.
+Approved on September 7, 2026 and revised after two design reviews on the same date. This design supersedes `docs/superpowers/specs/2026-09-03-generic-bevy-mcp-design.md`.
 
-The previous architecture deliberately delegated MCP behavior to the external `bevy_brp_mcp` executable. That decision is reversed: this repository will own the complete **default** MCP server behavior itself. Upstream source may be consulted as a pinned behavioral/schema reference while implementing parity, but it must not remain a runtime, build, install, subprocess, fallback, or packaging dependency.
+The architectural decision remains unchanged: this repository will own the complete **default** Bevy MCP server instead of launching the external `bevy_brp_mcp` executable. The second review found that the parity mechanism was too weak, not that the architecture was wrong. This revision makes parity machine-checkable and gives the type-guide subsystem the scope it actually requires.
 
-This draft PR remains planning/guidance only: no MCP runtime behavior is changed by this document revision. `CLAUDE.md` and README are updated only to mark the approved migration and prevent future work from following the superseded architecture while implementation continues on the same PR.
+The final merged product must have no runtime, build, install, subprocess, fallback, or CI dependency on the upstream MCP executable. During this one migration PR only, the existing launcher and pinned upstream 0.22.3 binary may remain temporarily as a **test oracle** until the owned server passes differential validation. They are deleted before the PR is complete.
 
 ## Review resolutions
 
-The review was accepted with the following resolutions:
+The second review is incorporated as follows:
 
-1. **Rewrite repository guidance.** `CLAUDE.md`/`AGENTS.md` currently forbid exactly this architecture. The planning branch updates that guidance before implementation begins, and the final migration task verifies it again.
-2. **Fix reflected Bevy `Name`.** Entity-name discovery must query `bevy_ecs::name::Name`, not `bevy_core::name::Name`. The live fixture gains a `Name` in the same implementation task as name discovery so mocks cannot hide a wrong reflected type path or JSON shape.
-3. **Pin one MCP result envelope.** Every tool returns structured content shaped as `{ message, result, metadata? }`; the existing integration journey already depends on that contract.
-4. **Target 47 default tools, not 49.** `brp_get_trace_log_path` and `brp_set_tracing_level` are behind upstream's non-default `mcp-debug` feature. They are not part of the default parity target and are removed together with the proposed `TraceLogger`.
-5. **Own process shutdown.** Spawned Bevy processes remain tracked and referenced. MCP shutdown stops watches, gracefully shuts down or terminates tracked Bevy processes, then closes the server. No `unref()` default.
-6. **One path owner.** `LogStore` creates every app/watch log path. `WatchManager` and `ProcessManager` only write to paths supplied by `LogStore`.
-7. **Keep TypeScript 5.x.** The server migration does not include a compiler-major upgrade. Add the MCP server SDK and Zod only; keep the current TypeScript 5.x line unless compilation proves a minimum-version bump is required.
-8. **Split implementation review boundaries, not PRs.** Cargo discovery/build and process/log ownership are separate implementation tasks and review checkpoints while remaining on the same branch/PR.
-9. **Expand independence cleanup.** CI's old `/tmp/bevy_brp_mcp_*.log` diagnostics, README, `CLAUDE.md`, and the `AGENTS.md` symlink target are part of the migration audit.
-10. **Snapshot the local contract.** The pinned upstream commit defines the migration input; local Zod/JSON-schema snapshots become the maintained contract after transcription.
+1. **Use a real parity oracle.** Capture the pinned upstream 0.22.3 `tools/list` response once and check it into `contracts/bevy-brp-mcp-0.22.3-tools.json`. The capture contains all 47 default tools with `name`, `title`, `description`, `annotations`, `inputSchema`, and `outputSchema`. It is static licensed reference data, not a live dependency.
+2. **Preserve tool guidance, not only names.** Runtime registration uses the checked-in contract metadata, so titles, descriptions, annotations, and schemas cannot silently disappear. A tiny reviewed override map may update obsolete log filename wording from `bevy_brp_mcp_*` to the repository-owned naming; all other contract drift is rejected.
+3. **Do not hand-transcribe 47 schemas.** Use the MCP SDK's raw JSON-Schema adapter (`fromJsonSchema`) with the checked-in contract fixture. This removes dozens of error-prone Zod transcriptions while keeping validation local and owned.
+4. **Match the real output envelope.** Every tool advertises and returns the upstream-compatible `ToolCallJsonResponse`: required `status`, `message`, and `call_info`; optional `metadata`, `parameters`, `result`, `error_info`, and `brp_extras_debug_info`. `result` is optional.
+5. **Treat type guides as a real subsystem.** Full default parity includes spawn/insert examples, mutation paths, agent guidance, schema info, registry presence, errors, and the curated Bevy type knowledge used to construct valid values. This work gets dedicated tasks and golden differential tests rather than one generic schema transform step.
+6. **Keep the old launcher only until cutover.** `src/index.ts`/`src/launcher.ts` stay as the upstream oracle while the owned server is developed through a temporary `owned-index` entrypoint. Before final cleanup, the same integration journey runs against both servers and compares normalized results. Then the launcher and upstream CI install step are removed.
+7. **Use the BRP watch stream.** `world.get_components+watch` and `world.list_components+watch` use their native streaming HTTP/SSE response. No polling loop or canonical-JSON differ is added.
+8. **Match log tool contracts exactly.** The public boundary remains filename/app-filter based: `brp_read_log{filename, keyword, tail_lines}`, `brp_list_logs{app_name, verbose}`, and `brp_delete_logs{app_name, older_than_seconds}`. Absolute paths are internal to `LogStore` only.
+9. **Keep one independence guard.** A single existing-suite test scans active runtime/build/config paths for executable/install dependency patterns. Final integration runs after the upstream install step has been removed, providing the behavioral proof.
+10. **Fail on unsafe JSON integers.** The BRP client rejects parsed integer values outside JavaScript's safe-integer range instead of silently corrupting entity IDs or other integer data.
 
-One review suggestion is intentionally **not** adopted: `brp_all_type_guides` is not dropped or given a new limit parameter because it is part of the default upstream tool surface and the user explicitly requested a complete rebuild. Its potentially large response is an accepted parity cost for this PR and is called out under Risks.
+The previous review resolutions also remain in force: the default catalog is 47 tools (the two `mcp-debug` trace tools are excluded), reflected entity names use `bevy_ecs::name::Name`, spawned children remain referenced and are cleaned up, `LogStore` is the sole path allocator, TypeScript stays on the current 5.x line unless the MCP SDK requires a minimum bump, Cargo freshness logic is not ported, and `brp_all_type_guides` retains its upstream port-only public contract.
 
 ## Goal
 
-Ship `@cwchanap/bevy-plugin` as a self-contained TypeScript MCP stdio server for Bevy development. A user with Node.js, Rust, and a Bevy project should be able to install the agent plugin and use the full default Bevy MCP toolset without separately installing `bevy_brp_mcp`.
+Ship `@cwchanap/bevy-plugin` as a self-contained TypeScript MCP stdio server for Bevy development. A developer with Node.js, Rust, and a Bevy project can install the plugin and use the complete default Bevy MCP surface without separately installing `bevy_brp_mcp`.
 
-The existing Rust `bevy-mcp-bridge` remains the application-side integration layer. It composes `bevy_brp_extras` and registers the repository-owned `bevy_mcp/world_stats` and `bevy_mcp/time_control` BRP methods. `bevy_brp_extras` is not the upstream MCP server being removed; it remains an app-side BRP capability provider.
+The existing Rust `bevy-mcp-bridge` remains the application-side integration. It composes `bevy_brp_extras` and registers `bevy_mcp/world_stats` and `bevy_mcp/time_control`. `bevy_brp_extras` is an app-side BRP provider, not the MCP server dependency being removed.
 
 ## Product principles
 
-- One implementation PR for the entire server rebuild.
-- Own every tool in the default upstream MCP catalog; no tool may use `brp_execute` as a fallback for a missing implementation.
-- `brp_execute` remains first-class because raw discovered BRP execution is itself part of the supported surface.
-- Preserve current default tool names and parameter intent as the migration parity contract; internal source layout may change freely.
-- Prefer small Node/TypeScript modules over porting Rust macros, registries, build-freshness logic, or other upstream implementation machinery.
-- Keep generic Bevy functionality only; no game-specific commands.
-- No backward-compatibility layer is required.
-- No persistence database, daemon, dependency-injection framework, plugin framework, or generic schema code generator.
+- One implementation PR for the migration.
+- Own every tool in the 47-tool default catalog; `brp_execute` is a public tool, never a fallback implementation for another tool.
+- Preserve the public MCP contract where doing so does not encode the old executable's identity.
+- Prefer static contract data and small Node modules over hand-written schema duplication, macro frameworks, databases, daemons, or custom Cargo build intelligence.
+- Generic Bevy developer tooling only; no game-specific commands.
+- No backward-compatibility layer beyond the explicit upstream parity target for this migration.
 
 ## Compatibility baseline
 
 - Node.js: `>=20`
-- MCP TypeScript SDK: `@modelcontextprotocol/server` 2.x
+- MCP server SDK: `@modelcontextprotocol/server` 2.x
 - MCP integration client: `@modelcontextprotocol/client` 2.x
-- Schema library: Zod 4
-- TypeScript: existing 5.x line (`^5.3.3` today), raised only if the server SDK actually requires it
+- TypeScript: existing 5.x line (`^5.3.3` today), raised only if the SDK actually requires it
 - Bevy: 0.19.x
 - `bevy_brp_extras`: 0.22.3
 - Rust: `>=1.95`, edition 2024
 - Default BRP port: 15702
 - Native macOS/Linux/Windows debugging
 
-## Parity source
+No direct schema-library dependency is required for tool registration: the server SDK can adapt the captured raw JSON Schemas. Internal TypeScript types remain ordinary interfaces and narrow parsing helpers.
 
-Implementation may consult upstream `natepiano/bevy_brp` commit:
+## Parity source and licensed contract fixture
+
+The migration reference is:
 
 ```text
-85d0ecaed0b4aaebc5ba6d2b54026489e9e5042b
+natepiano/bevy_brp
+commit 85d0ecaed0b4aaebc5ba6d2b54026489e9e5042b
+bevy_brp_mcp 0.22.3
 ```
 
-This commit is a migration reference only. It is not fetched, built, linked, invoked, vendored, or packaged by this repository.
+At the start of implementation, the existing launcher connects to that pinned default server once and captures its `tools/list` result into:
 
-The upstream `mcp-debug` feature has no default enablement, so its two trace-only tools are outside the default catalog. The owned default catalog contains **47 tools**.
+```text
+contracts/bevy-brp-mcp-0.22.3-tools.json
+```
+
+Each entry stores exactly the public contract fields needed by clients:
+
+```ts
+interface CapturedToolContract {
+  name: string;
+  title?: string;
+  description?: string;
+  annotations?: Record<string, unknown>;
+  inputSchema: Record<string, unknown>;
+  outputSchema?: Record<string, unknown>;
+}
+```
+
+The repository also adds `THIRD_PARTY_NOTICES.md` identifying the source commit/package and reproducing the applicable MIT notice for copied descriptions/schema metadata and any translated type-guide logic.
+
+This fixture is immutable migration evidence. CI never regenerates it and the final product never invokes upstream to read it. It is checked-in data owned by this repository after capture.
+
+### Runtime use of the contract
+
+`ToolContractCatalog` loads the checked-in fixture and `registerOwnedTool()` registers the local handler with the captured:
+
+- title;
+- description;
+- annotations;
+- input schema via `fromJsonSchema`;
+- output schema via `fromJsonSchema`.
+
+This makes the captured public metadata the runtime contract as well as the parity oracle, avoiding a second hand-maintained schema representation.
+
+A small `CONTRACT_OVERRIDES` map may change only reviewed fields that necessarily refer to the retired implementation. Initial allowed differences are log-description text that names `bevy_brp_mcp_*` files. Name, input schema, output schema, and annotations have no general allowlist.
 
 ## Default 47-tool catalog
 
-### World / ECS / resource / discovery
+### World / ECS / resources / discovery
 
 - `world_list_components`
 - `world_get_components`
@@ -134,10 +168,12 @@ The upstream `mcp-debug` feature has no default enablement, so its two trace-onl
 - `brp_type_guide`
 - `brp_all_type_guides`
 
+The optional upstream `mcp-debug` tools `brp_get_trace_log_path` and `brp_set_tracing_level` are not in the default catalog and are not implemented in this PR.
+
 ## Architecture
 
 ```text
-Codex / Claude Code / Pi / MCP client
+Codex / Claude / Pi / MCP client
                   |
                   | stdio
                   v
@@ -147,9 +183,9 @@ Codex / Claude Code / Pi / MCP client
        +----------+-----------+
        |                      |
        v                      v
- Node runtime services    BRP JSON-RPC client
- Cargo/process/log/watch        |
-                                | localhost HTTP
+ Node runtime services    BRP HTTP client
+ Cargo/process/log/watch   call + stream
+                                |
                                 v
                           Bevy application
                                 |
@@ -161,187 +197,223 @@ Codex / Claude Code / Pi / MCP client
 
 ### Ownership boundaries
 
-**MCP server owns:** MCP stdio, tool registration/schemas, tool result envelopes, orchestration, annotations, and error conversion.
+**Tool contract catalog** owns checked-in names/titles/descriptions/annotations/input/output schemas and the tiny explicit override map.
 
-**BRP client owns:** one JSON-RPC HTTP request, timeout/abort handling, response decoding, and BRP error normalization. It has no tool knowledge.
+**MCP server** owns stdio, local handler registration, response construction, and MCP error signaling.
 
-**Cargo runtime owns:** `cargo metadata` target discovery and `cargo build --message-format=json-render-diagnostics` artifact resolution. It always invokes Cargo build and relies on Cargo incremental compilation.
+**BRP client** owns localhost JSON-RPC HTTP calls, streaming requests, timeout/abort behavior, response decoding, BRP error normalization, and unsafe-integer rejection. It contains no tool-specific orchestration.
 
-**Process manager owns:** live spawned-child state and lifecycle only. It does not create log paths and does not persist state.
+**Cargo runtime** owns `cargo metadata` target discovery and `cargo build --message-format=json-render-diagnostics` artifact resolution. It always invokes Cargo build and relies on Cargo incremental compilation.
 
-**LogStore owns:** the complete `<tmp>/bevy-mcp/{apps,watches}` path policy, safe file creation, list/read/delete, filename sanitization, and containment checks.
+**Process manager** owns tracked spawned-child lifecycle only. It never allocates paths and does not persist state.
 
-**WatchManager owns:** monotonic watch IDs, polling, change detection, cancellation, and writing events to a `LogStore`-provided path. Watches are in-memory only.
+**LogStore** owns `<tmp>/bevy-mcp/{apps,watches}`, filename allocation, filename-to-owned-path resolution, list/read/delete filtering, and containment.
 
-**Type-guide module owns:** pure transformation from live Bevy registry data into the public guide format. No copied upstream prose framework.
+**WatchManager** owns numeric watch IDs, one open streaming request per watch, stream cancellation, active-watch metadata, lifecycle cleanup, and writing received watch events to a `LogStore`-provided file.
 
-## MCP result contract
+**Type-guide subsystem** owns the full default type-intelligence behavior: registry/type-name resolution, type-kind/schema interpretation, spawn/insert examples, mutation paths, agent guidance, curated Bevy type knowledge, and all-types orchestration.
 
-All handlers use one helper and one structured-content envelope:
+## MCP tool response contract
+
+All 47 tools advertise the same captured output schema and return an upstream-compatible structured response:
 
 ```ts
-export interface ToolEnvelope<T = unknown, M extends Record<string, unknown> = Record<string, unknown>> {
-  message: string;
-  result: T;
-  metadata?: M;
-}
+type ResponseStatus = 'success' | 'error';
 
-export function toolResult<T, M extends Record<string, unknown>>(
-  envelope: ToolEnvelope<T, M>,
-): CallToolResult;
+type CallInfo =
+  | { mcp_tool: string }
+  | { mcp_tool: string; brp_method: string };
+
+interface ToolCallJsonResponse {
+  status: ResponseStatus;
+  message: string;
+  call_info: CallInfo;
+  metadata?: unknown;
+  parameters?: unknown;
+  result?: unknown;
+  error_info?: unknown;
+  brp_extras_debug_info?: unknown;
+}
 ```
 
-`structuredContent` is exactly the envelope. `content` contains a short text representation of `message` for clients that do not use structured content.
+`status`, `message`, and `call_info` are always present. `result` is optional. A successful tool call can legitimately have metadata but no result. Errors use `status: 'error'`, `isError: true`, and place structured details in `metadata` and/or `error_info` as appropriate.
 
-Direct BRP wrappers put the decoded BRP payload in `result`. Composite/local tools may add stable metadata such as entity counts, PIDs, watch IDs, or log paths. Handlers do not invent top-level structured-content shapes.
+`parameters` preserves normalized public parameters for parity, omitting absent optional/null fields the same way the upstream response builder does. Direct BRP wrappers use a BRP-form `call_info`; local/composite tools use local call info unless they represent one fixed BRP method.
+
+The MCP SDK registers the shared captured `outputSchema`, so invalid local `structuredContent` is caught during tests/server execution rather than by consumers.
 
 ## BRP transport
 
-`BrpClient` uses native `fetch` against `http://127.0.0.1:<port>` with JSON-RPC 2.0 requests.
+`BrpClient` uses native `fetch` against `http://127.0.0.1:<port>`.
 
-Responsibilities are intentionally small:
+### Instant calls
 
-- monotonically increasing request ID;
-- method + params serialization;
-- per-call port, defaulting to 15702;
-- timeout and caller abort propagation;
-- invalid/malformed response detection;
-- preservation of BRP `error.code`, `message`, and `data`.
+`call(method, params, options)` performs one JSON-RPC 2.0 POST with request IDs, timeout, caller abort forwarding, JSON decoding, HTTP/JSON-RPC error conversion, and no retry/method cache.
 
-No retry layer, method cache, dynamic proxy, remote host support, or alternate transport is included.
+After JSON parsing, the client recursively rejects integer values for which `Number.isSafeInteger(value)` is false. This turns unsupported 64-bit integer responses into explicit errors instead of silently corrupting entity IDs or component data.
 
-## Schemas and long-term parity
+### Streaming calls
 
-Public MCP parameters are transcribed from the pinned default upstream contracts into local Zod 4 schemas. Known schemas must not be replaced by root `z.any()`, `z.unknown()`, or catch-all objects.
+`stream(method, params, options)` performs the same request without an ordinary call timeout and returns a successfully established HTTP response/body plus an abort handle. It is used only by watch tools.
 
-Once transcribed, generated JSON Schema snapshots are committed in-repo. Those snapshots—not a live upstream checkout—become the maintained contract. A future Bevy/BRP upgrade is an explicit task that audits:
+No remote-host support, alternate transport, reconnect loop, or generic proxy is included.
 
-1. the 47-name catalog;
-2. tool-to-BRP method tables;
-3. Zod contracts and JSON-schema snapshots;
-4. composites such as screenshot/name resolution;
-5. the real fixture journey.
+## Direct tools and composites
 
-This maintenance cost is accepted as the price of eliminating the external MCP executable.
-
-## Direct tools vs composites
-
-Most tools are declarative mappings through one `registerDirectBrpTool` helper. The helper receives a fixed method at registration time; callers cannot choose it dynamically.
+Most BRP passthroughs use one fixed-method helper. Contracts come from `ToolContractCatalog`; handler code only removes MCP-only routing fields such as `port`, calls the fixed method, and builds the standard response.
 
 Explicit local/composite handlers are limited to behavior that actually needs orchestration:
 
 - `world_find_entities_by_name`;
 - `brp_execute` discovery validation;
-- `brp_list_agent_tools` normalization;
-- `brp_extras_screenshot` name/entity selection;
-- watch start/list/stop;
-- application discovery/launch/status/shutdown;
-- log list/read/delete;
+- `brp_list_agent_tools` normalization/error metadata;
+- `brp_extras_screenshot` exact-name resolution;
+- watches;
+- Cargo/application/process/log tools;
 - type guides.
 
-No other handler may call the `brp_execute` handler.
+No handler calls the `brp_execute` handler as a shortcut.
 
 ## Reflected `Name`
 
-Entity-name lookup queries the reflected component type:
+Entity-name lookup queries:
 
 ```text
 bevy_ecs::name::Name
 ```
 
-It performs one `world.query` using both `data.components` and `filter.with`, reads each returned Name value using the wire shape observed from Bevy 0.19, filters locally with case-sensitive `exact | prefix | suffix | contains`, and returns ascending entity IDs.
+It performs one standard `world.query` with the type in both `data.components` and `filter.with`, decodes the observed Bevy 0.19 Name wire value, filters case-sensitively with `exact | prefix | suffix | contains`, and sorts by entity ID.
 
-The full fixture gains `Name::new("FixturePrimary")` in the same task as this composite, and the test must exercise the actual live BRP payload before screenshot-by-name is considered complete.
+The fixture gains `Name::new("FixturePrimary")` and a mutable `FixtureValue` in the same implementation task. A live smoke test must prove the actual BRP payload before screenshot-by-name is accepted.
 
-## Watches
+## Native watch streams
 
-Watches are local polling tasks rather than a second BRP streaming transport.
+`world_get_components_watch` and `world_list_components_watch` open the Bevy `+watch` streaming endpoint instead of polling snapshots.
 
 Rules:
 
 - IDs start at 1 and increase monotonically;
-- a watch is registered only after its initial BRP read succeeds;
-- `world_get_components_watch` requires at least one component type;
-- default polling interval is 250 ms;
-- stable canonical JSON is used only for snapshot equality;
-- unchanged snapshots are not re-logged;
-- `LogStore` allocates the watch log path;
+- `world_get_components_watch` requires at least one type;
+- `LogStore` allocates the watch filename/path before connection;
+- the watch is exposed as active only after the HTTP streaming response is successfully established;
+- the parser accepts SSE `data: <json>` records split across arbitrary chunks/lines;
+- JSON-RPC `result` values are appended as watch update records;
+- stream error/end removes the watch from the active registry;
+- `brp_stop_watch` aborts the stream;
 - stopping an unknown watch is a tool error;
-- all watches stop during server shutdown.
+- all streams abort during server shutdown.
 
-## Cargo and launch
+No polling interval, canonical JSON serializer, or change-diff logic exists.
 
-`brp_list_bevy` is based on `cargo metadata --format-version 1 --no-deps` and returns binary apps/examples with deterministic ordering.
+## Cargo and process lifecycle
 
-`brp_launch`:
+`brp_list_bevy` uses `cargo metadata --format-version 1 --no-deps` and deterministic target normalization.
 
-1. resolves the requested workspace/path;
-2. applies app/example search order and optional package disambiguation;
-3. validates the consecutive port range;
-4. runs Cargo build once for the selected target/profile;
-5. parses Cargo JSON `compiler-artifact.executable` rather than predicting target paths;
-6. asks `LogStore` for an app log path;
-7. spawns one or more referenced child processes with consecutive ports;
-8. sets `BRP_EXTRAS_PORT` after user environment merging;
-9. records child metadata in memory.
+`brp_launch` resolves app/example/package/path, validates consecutive ports, invokes Cargo build, parses the matching `compiler-artifact.executable`, asks `LogStore` for app log filenames, then spawns referenced child processes with `BRP_EXTRAS_PORT` set after user environment merging.
 
 No custom freshness optimizer is ported.
 
-## Process lifecycle
-
-Spawned children are **not** `unref()`ed.
-
-`brp_shutdown` first requests `brp_extras/shutdown`, waits a bounded interval, then terminates a still-running tracked process if needed.
-
-A single MCP cleanup function is used by signals and stdio/server shutdown:
+Spawned children are not `unref()`ed. `brp_shutdown` first requests `brp_extras/shutdown`, waits a bounded interval, then terminates a tracked child still alive. Shared server cleanup is:
 
 ```text
 WatchManager.stopAll()
 -> ProcessManager.shutdownAll()
 -> server.close()
--> exit
 ```
 
-`shutdownAll()` tries graceful BRP shutdown for known ready ports where practical, then sends ordinary process termination to any remaining tracked child. No process-tree dependency or daemon is added.
+## Log tools
 
-## Logs
-
-All owned files live below:
+Public contracts stay upstream-compatible:
 
 ```text
-<tmp>/bevy-mcp/apps/
-<tmp>/bevy-mcp/watches/
+brp_list_logs   { app_name?, verbose? }
+brp_read_log    { filename, keyword?, tail_lines? }
+brp_delete_logs { app_name?, older_than_seconds? }
 ```
 
-`LogStore` alone creates paths. `ProcessManager` receives an app log path; `WatchManager` receives a watch log path.
+No log tool accepts an absolute path or BRP port.
 
-`brp_list_logs`, `brp_read_log`, and `brp_delete_logs` operate only inside this root. Canonical containment prevents path traversal or arbitrary file deletion.
+Internally `LogStore` resolves filenames only under its owned root, rejects traversal, filters list/delete by app name and age, performs case-insensitive keyword filtering, and supports tail reads. Returned verbose metadata may include an absolute owned path, but callers never provide one.
 
-MCP-internal observability uses stderr; there is no public trace subsystem in this PR.
+MCP-internal observability uses stderr only.
 
-## Type guides
+## Full type-guide parity
 
-`brp_type_guide` and `brp_all_type_guides` remain part of parity.
+`brp_type_guide` and `brp_all_type_guides` are not reduced to generic schema pretty-printing. The owned implementation reproduces the default upstream guide semantics, including:
 
-Implementation uses pure transforms over current registry/list responses rather than copying the upstream type-guide framework. `brp_all_type_guides` remains potentially large because changing its public contract or dropping it would violate the requested default parity. It should use bounded internal work (one relevant registry fetch/pass rather than N redundant requests) but returns the complete compatible result.
+- fully-qualified type naming and registry presence;
+- type-kind/schema information;
+- spawn/insert examples;
+- mutation-path generation for structs, tuple structs, tuples, lists/arrays, maps/sets, enums and nested types;
+- curated example values for Bevy-specific/special types where upstream uses type knowledge;
+- `agent_guidance`, including Entity-specific warnings;
+- per-type processing errors without turning one failed type into an all-types transport failure;
+- complete `brp_all_type_guides` behavior with its existing port-only public parameters.
+
+Translated algorithms/constants that are substantially derived from upstream carry source comments and are covered by `THIRD_PARTY_NOTICES.md`.
+
+### Golden validation
+
+Before deleting the oracle launcher, capture upstream type-guide outputs for representative live types from the fixture/app, including at minimum:
+
+- `FixtureValue` struct;
+- a fixture nested enum/struct type added for this purpose;
+- Bevy `Transform`;
+- a type containing `Entity`;
+- a missing/unregistered type.
+
+Store normalized golden responses under `test/contracts/type-guides/`. The owned implementation must match their semantic structure and guidance/mutation-path content. `brp_all_type_guides` is also compared for inclusion/count/failure semantics without committing an enormous all-types golden blob.
+
+## Differential migration strategy
+
+The existing launcher is not a fallback. It is retained temporarily as the reference executable while the owned server develops beside it.
+
+During migration:
+
+```text
+build/index.js       -> existing upstream launcher
+build/owned-index.js -> repository-owned MCP server
+```
+
+The integration harness accepts a server mode and can run the same fixture journey against either entrypoint. Before cutover it runs both and compares:
+
+- exact `tools/list` metadata against the captured contract;
+- deterministic structured response fields exactly;
+- nondeterministic fields such as PID/path/timestamp/duration by normalized shape/meaning;
+- representative type-guide outputs against captured goldens;
+- watch event behavior through the native stream.
+
+Only after the differential gate is green does the PR replace `src/index.ts` with the owned entrypoint and delete `src/launcher.ts`, its tests, and the upstream CI install step.
 
 ## Testing strategy
 
-Testing proceeds by domain while remaining one PR:
+Testing remains one PR with task-level review checkpoints:
 
-1. server bootstrap + result envelope;
-2. BRP transport;
-3. direct world/resource schemas and mappings;
-4. live fixture-backed name discovery + application tools + type guides;
-5. extras and screenshot composite;
-6. shared LogStore + watches;
-7. Cargo discovery/build, including a real metadata check against this workspace;
-8. process/app lifecycle + log tools;
-9. exact 47-tool registration + local JSON-schema snapshots;
-10. real MCP client -> owned server -> Bevy fixture journey;
-11. CI/docs/upstream-independence cleanup.
+1. capture licensed upstream contract fixture and add parity oracle tests;
+2. owned MCP server bootstrap beside the legacy launcher + full response envelope;
+3. instant/streaming BRP transport;
+4. direct world/resource registration driven by captured contracts;
+5. live name discovery and agent tools;
+6. type-guide core/schema/value construction;
+7. type-guide mutation paths/knowledge/golden parity;
+8. extras/screenshot composites;
+9. `LogStore` + SSE watches;
+10. Cargo discovery/build;
+11. process/app/log lifecycle;
+12. complete 47-tool registration + upstream-vs-owned differential cutover;
+13. final no-upstream CI/docs/package cleanup.
 
-Each implementation task gets its own test/commit/review checkpoint while all commits remain on the same implementation PR.
+## Final upstream-independence gate
+
+The final repository keeps one unit test that scans active source/build/config surfaces for executable dependency patterns such as:
+
+```text
+cargo install bevy_brp_mcp
+BEVY_BRP_MCP_BIN
+spawn/command of bevy_brp_mcp
+```
+
+It intentionally does not reject historical/reference strings in design docs, `THIRD_PARTY_NOTICES.md`, or the static captured contract file. Final CI no longer installs upstream and the real owned-server integration must pass in that environment.
 
 ## Non-goals
 
@@ -350,43 +422,51 @@ Each implementation task gets its own test/commit/review checkpoint while all co
 - Game-specific debug operations.
 - Standalone `bevy_ecs::World` transport.
 - WASM/browser relay.
-- Remote-host discovery/network authentication.
-- Automatic source/project rewriting.
+- Remote-host discovery/authentication.
+- Automatic consumer-project rewriting.
 - Persistent process/watch state.
-- A custom MCP implementation.
-- Rust-style macro/code generation for tool registration.
-- Custom Cargo freshness detection.
-- Public MCP trace/debug tools outside the default upstream catalog.
+- Custom MCP framing.
+- Custom Cargo freshness logic.
+- Optional `mcp-debug` trace tools.
 
 ## Risks and mitigations
 
-### Schema drift
+### Contract capture drift
 
-Owning ~47 tool contracts means future Bevy/BRP upgrades require explicit maintenance. Mitigation: local Zod schemas, committed JSON-schema snapshots, exact catalog/method tests, and a pinned migration reference.
+The captured `tools/list` data is the migration source of truth for 0.22.3, so a bad capture would infect local registration. Mitigation: assert exactly 47 expected names, shared output schema, known method mappings, and source version during capture; never regenerate silently.
+
+### Licensed copied material
+
+Descriptions and translated type-guide logic are derived from upstream. Mitigation: preserve the MIT notice/source attribution in `THIRD_PARTY_NOTICES.md` and source comments where substantial code is translated.
+
+### Type-guide scope
+
+This is the largest logic port and easiest place to ship false parity. Mitigation: dedicated tasks, representative upstream goldens, live `Transform`/nested-enum coverage, and differential validation before cutover.
 
 ### Reflected type drift
 
-A wrong reflected path or payload shape can make composites silently return no matches. Mitigation: use `bevy_ecs::name::Name` and add a live fixture assertion in the same task as name lookup.
+A wrong Bevy type path/wire shape can make composites silently empty. Mitigation: same-task live fixture smoke for `bevy_ecs::name::Name`.
 
-### Orphaned processes
+### Orphaned processes/streams
 
-If child processes are detached/unreferenced, closing an agent session can leave windows and occupied BRP ports. Mitigation: keep children referenced and use one cleanup path for signals/stdio close.
+MCP exit could leave apps or watch connections alive. Mitigation: referenced children, abortable stream handles, idempotent ordered cleanup, and E2E process-exit assertions.
 
-### Large all-type-guide responses
+### JavaScript integer precision
 
-`brp_all_type_guides` can produce a large response on large applications. This is intentionally retained for default parity in this PR. If it becomes problematic, changing that public tool is a separate explicit product decision rather than a hidden migration deviation.
+BRP can carry integers larger than JavaScript's safe range. Mitigation: reject unsafe parsed integers centrally rather than returning corrupted IDs/data.
+
+### Large all-type-guide response
+
+`brp_all_type_guides` can be large, but changing its parameters would violate default parity. Mitigation: efficient shared registry/type processing and preserved upstream large-response behavior where required by the captured/differential contract.
 
 ## Definition of done
 
-A clean environment containing Node.js, Rust, this repository, and the fixture Bevy app—but **no installed `bevy_brp_mcp` executable**—must:
+On a machine with Node, Rust, this repository, and the fixture Bevy app—but with no upstream MCP executable installed—the packed npm package must:
 
-1. install/build `@cwchanap/bevy-plugin`;
-2. start it directly as an MCP stdio server;
-3. expose exactly the 47 default parity tools;
-4. pass local schema snapshots and domain tests;
-5. discover/build/launch the real fixture;
-6. exercise representative behavior from every tool family;
-7. shut down watches and spawned apps without orphaning processes;
-8. complete screenshot/log/type/agent-tool journeys;
-9. pass Rust, Node, packed-package, independence, and Xvfb integration CI gates;
-10. contain no runtime/build/install/subprocess dependency on `bevy_brp_mcp`.
+1. start directly as an MCP stdio server;
+2. expose exactly the 47 captured default tools with owned descriptions/titles/annotations/input/output schemas, except explicitly reviewed implementation-name text overrides;
+3. return responses matching the shared upstream-compatible output schema;
+4. pass representative behavior tests for every tool family, including native watch streaming and full type-guide guidance/mutation paths;
+5. complete the real fixture journey;
+6. terminate its watches and tracked Bevy children on close; and
+7. contain no executable/build/install/fallback dependency on `bevy_brp_mcp`.
