@@ -1,3 +1,4 @@
+import { BrpClient } from './brp/client.js';
 import type { ToolContractCatalog } from './tool-contracts.js';
 import { loadToolContractCatalog } from './tool-contracts.js';
 
@@ -13,6 +14,7 @@ export interface ProcessService {
 
 /** Shared service objects handed to every owned tool. */
 export interface BevyMcpServices {
+  brp: BrpClient;
   catalog: ToolContractCatalog;
   watches: WatchService;
   processes: ProcessService;
@@ -24,6 +26,7 @@ export interface BevyMcpServices {
  */
 export function createServices(): BevyMcpServices {
   return {
+    brp: new BrpClient(),
     catalog: loadToolContractCatalog(),
     watches: {
       // ponytail: stub until the watch task lands; owned-index cleanup order already codes the contract
