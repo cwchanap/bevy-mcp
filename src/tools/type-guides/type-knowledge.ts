@@ -129,14 +129,14 @@ const EXAMPLE_FIXED_TIMESTEP_NANOS = 15_625_000;
 const EXAMPLE_VIRTUAL_MAX_DELTA_NANOS = 250_000_000;
 const DEFAULT_WRAP_PERIOD_SECS = 3_600;
 
-/** `{secs, nanos}` duration object (upstream `constants.rs` `duration_value`; keys sorted). */
+/** `{nanos, secs}` duration object (upstream `constants.rs` `duration_value`; insertion order). */
 function durationValue(seconds: number, nanoseconds: number): Json {
   return { nanos: nanoseconds, secs: seconds };
 }
 
-/** Bevy math `Rect` object (upstream `constants.rs` `rect_value`; keys sorted). */
+/** Bevy math `Rect` object (upstream `constants.rs` `rect_value`; insertion order). */
 function rectValue(): Json {
-  return { max: EXAMPLE_RECT_MAX, min: EXAMPLE_RECT_MIN };
+  return { min: EXAMPLE_RECT_MIN, max: EXAMPLE_RECT_MAX };
 }
 
 /** `{"Window": "Primary"}` render target (upstream `primary_window_target_value`). */

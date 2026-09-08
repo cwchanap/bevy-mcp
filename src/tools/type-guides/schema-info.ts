@@ -322,22 +322,15 @@ function countOccurrences(input: string, needle: string): number {
   return count;
 }
 
-/** Parse `module::Type<Generics>` returning the consumed length, or undefined. */
+/** Parse `module::Type<Generics>` returning the consumed length, or undefined.
+ *
+ * Faithful to the upstream nom parser: when generics fail to parse, only the
+ * identifier chain is consumed (the caller then sees leftover input and fails,
+ * producing the `UnknownType::` fallback). */
 function parseTypePath(input: string): string | undefined {
-  let pos = 0;
-  for (;;) {
-    const id = parseIdentifier(input.slice(pos));
-    if (id === undefined) return undefined;
-    pos += id;
-    if (input.slice(pos, pos + 2) === '::') {
-      pos += 2;
-      continue;
-    }
-    break;
-  }
-  const genericLength = parseGenerics(input.slice(pos));
-  if (genericLength === undefined) return undefined;
-  return input.slice(0, pos + genericLength);
+  let pos = parseTypeEntry(input);
+  if (pos === 0) return undefined; // take_while1 failed on the first identifier
+  return input.slice(0, pos);
 }
 
 /** Parse one identifier (alphanumeric + underscore); returns its length. */
@@ -347,19 +340,54 @@ function parseIdentifier(input: string): number | undefined {
   return match[0].length;
 }
 
-/** Parse `<T, U>` with nested generics; returns consumed length. */
+/**
+ * One `type_path_inner` alternative (upstream nom `type_path_inner`):
+ * identifiers separated by `::`, plus optional generics. Never fails; a
+ * 0-consumption result is meaningful for `separated_list0` guards.
+ */
+function parseTypeEntry(input: string): number {
+  let pos = 0;
+  for (;;) {
+    const id = parseIdentifier(input.slice(pos));
+    if (id === undefined) break;
+    pos += id;
+    if (input.slice(pos, pos + 2) !== '::') break;
+    // A dangling `::` is not consumed when no identifier follows (nom backtrack).
+    const nextId = parseIdentifier(input.slice(pos + 2));
+    if (nextId === undefined) break;
+    pos += 2;
+  }
+  // opt(generics): consumed only when a complete generics block parses.
+  const genericLength = parseGenerics(input.slice(pos));
+  if (genericLength !== undefined) pos += genericLength;
+  return pos;
+}
+
+/**
+ * Parse `<T, U>` generics exactly like the upstream nom combinators:
+ * `<`, a `separated_list0` of entries separated by the literal `", "`, then
+ * `>`. Element parsers that consume nothing terminate the list (nom's
+ * empty-match guard); a trailing separator or malformed entry fails the
+ * whole generics (undefined), never a partial consumption.
+ */
 function parseGenerics(input: string): number | undefined {
-  if (!input.startsWith('<')) return 0;
-  let depth = 0;
-  for (let i = 0; i < input.length; i++) {
-    const ch = input[i];
-    if (ch === '<') depth++;
-    else if (ch === '>') {
-      depth--;
-      if (depth === 0) return i + 1;
+  if (!input.startsWith('<')) return undefined;
+  let pos = 1;
+  // separated_list0(", ", type_entry)
+  const firstEntry = parseTypeEntry(input.slice(pos));
+  if (firstEntry === undefined || firstEntry === 0) {
+    pos += 0; // empty first element; the closing check below decides
+  } else {
+    pos += firstEntry;
+    for (;;) {
+      if (input.slice(pos, pos + 2) !== ', ') break;
+      const nextEntry = parseTypeEntry(input.slice(pos + 2));
+      if (nextEntry === undefined || nextEntry === 0) break; // backtrack before separator
+      pos += 2 + nextEntry;
     }
   }
-  return undefined;
+  if (input.slice(pos, pos + 1) !== '>') return undefined;
+  return pos + 1;
 }
 
 /**

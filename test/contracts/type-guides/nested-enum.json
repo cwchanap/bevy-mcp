@@ -1,0 +1,116 @@
+{
+  "status": "success",
+  "message": "Discovered 1 type(s)",
+  "call_info": {
+    "mcp_tool": "brp_type_guide"
+  },
+  "metadata": {
+    "type_count": 1
+  },
+  "parameters": {
+    "types": [
+      "bevy_mcp_fixture::FixtureMode"
+    ],
+    "port": 15702
+  },
+  "result": {
+    "discovered_count": 1,
+    "requested_types": [
+      "bevy_mcp_fixture::FixtureMode"
+    ],
+    "summary": {
+      "failed_discoveries": 0,
+      "successful_discoveries": 1,
+      "total_requested": 1
+    },
+    "type_guide": {
+      "bevy_mcp_fixture::FixtureMode": {
+        "type_name": "bevy_mcp_fixture::FixtureMode",
+        "in_registry": true,
+        "spawn": {
+          "agent_guidance": "The 'example' below can be used to spawn this component on an entity.",
+          "example": {
+            "Moving": {
+              "speed": 1
+            }
+          }
+        },
+        "agent_guidance": "The 'mutation_paths' field provides valid 'path' arguments for 'mcp__brp__world_mutate_components' and 'mcp__brp__world_mutate_resources' tools, with example values suitable for testing.",
+        "mutation_paths": [
+          {
+            "path": "",
+            "description": "Replace the entire FixtureMode enum",
+            "path_info": {
+              "path_kind": "RootValue",
+              "type": "bevy_mcp_fixture::FixtureMode",
+              "type_kind": "Enum",
+              "mutability": "mutable"
+            },
+            "examples": [
+              {
+                "applicable_variants": [
+                  "FixtureMode::Idle"
+                ],
+                "example": "Idle",
+                "signature": "Unit",
+                "mutability": "mutable"
+              },
+              {
+                "applicable_variants": [
+                  "FixtureMode::Moving"
+                ],
+                "example": {
+                  "Moving": {
+                    "speed": 1
+                  }
+                },
+                "signature": {
+                  "Struct": [
+                    [
+                      "speed",
+                      "f32"
+                    ]
+                  ]
+                },
+                "mutability": "mutable"
+              }
+            ]
+          },
+          {
+            "path": ".speed",
+            "description": "Mutate the speed field of FixtureMode within FixtureMode::Moving variant",
+            "path_info": {
+              "path_kind": "StructField",
+              "type": "f32",
+              "type_kind": "Value",
+              "mutability": "mutable",
+              "applicable_variants": [
+                "FixtureMode::Moving"
+              ],
+              "enum_instructions": "Current mutation path is nested within an enum variant. To mutate, first mutate path \"\" to the 'example' value in 'path_info', then this path.",
+              "example": {
+                "Moving": {
+                  "speed": 1
+                }
+              }
+            },
+            "example": 1
+          }
+        ],
+        "schema_info": {
+          "type_kind": "Enum",
+          "module_path": "bevy_mcp_fixture",
+          "crate_name": "bevy_mcp_fixture",
+          "reflect_traits": [
+            "Component"
+          ],
+          "component_info": {
+            "mutable": true,
+            "storageType": "Table",
+            "isSendAndSync": true
+          }
+        }
+      }
+    }
+  }
+}

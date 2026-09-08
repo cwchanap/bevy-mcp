@@ -1,0 +1,89 @@
+{
+  "status": "success",
+  "message": "Discovered 1 type(s)",
+  "call_info": {
+    "mcp_tool": "brp_type_guide"
+  },
+  "metadata": {
+    "type_count": 1
+  },
+  "parameters": {
+    "types": [
+      "bevy_mcp_fixture::FixtureValue"
+    ],
+    "port": 15702
+  },
+  "result": {
+    "discovered_count": 1,
+    "requested_types": [
+      "bevy_mcp_fixture::FixtureValue"
+    ],
+    "summary": {
+      "failed_discoveries": 0,
+      "successful_discoveries": 1,
+      "total_requested": 1
+    },
+    "type_guide": {
+      "bevy_mcp_fixture::FixtureValue": {
+        "type_name": "bevy_mcp_fixture::FixtureValue",
+        "in_registry": true,
+        "spawn": {
+          "agent_guidance": "The 'example' below can be used to spawn this component on an entity.",
+          "example": {
+            "value": 1
+          }
+        },
+        "agent_guidance": "The 'mutation_paths' field provides valid 'path' arguments for 'mcp__brp__world_mutate_components' and 'mcp__brp__world_mutate_resources' tools, with example values suitable for testing.",
+        "mutation_paths": [
+          {
+            "path": "",
+            "description": "Replace the entire FixtureValue struct",
+            "path_info": {
+              "path_kind": "RootValue",
+              "type": "bevy_mcp_fixture::FixtureValue",
+              "type_kind": "Struct",
+              "mutability": "mutable"
+            },
+            "example": {
+              "value": 1
+            }
+          },
+          {
+            "path": ".value",
+            "description": "Mutate the value field of FixtureValue",
+            "path_info": {
+              "path_kind": "StructField",
+              "type": "i32",
+              "type_kind": "Value",
+              "mutability": "mutable"
+            },
+            "example": 1
+          }
+        ],
+        "schema_info": {
+          "type_kind": "Struct",
+          "properties": {
+            "value": {
+              "type": {
+                "$ref": "#/$defs/i32"
+              }
+            }
+          },
+          "required": [
+            "value"
+          ],
+          "module_path": "bevy_mcp_fixture",
+          "crate_name": "bevy_mcp_fixture",
+          "reflect_traits": [
+            "Component"
+          ],
+          "component_info": {
+            "mutable": true,
+            "storageType": "Table",
+            "isSendAndSync": true
+          }
+        }
+      }
+    }
+  }
+}
