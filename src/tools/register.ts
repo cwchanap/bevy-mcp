@@ -3,7 +3,13 @@ import {
   type CallToolResult,
   type McpServer,
 } from '@modelcontextprotocol/server';
+import { DEFAULT_BRP_PORT } from '../brp/client.js';
+import { BrpError, BrpHttpError, BrpJsonRpcError } from '../brp/errors.js';
 import { overrideDescription, type ToolContractCatalog } from '../tool-contracts.js';
+import type { BevyMcpServices } from '../services.js';
+import { toolError, toolSuccess, type CallInfo } from './response.js';
+import { RESOURCE_DIRECT } from './resources.js';
+import { WORLD_DIRECT } from './world.js';
 
 /** Handler for an owned tool: receives the raw MCP call arguments. */
 export type OwnedToolHandler = (args: Record<string, unknown>) => Promise<CallToolResult>;
@@ -32,4 +38,67 @@ export function registerOwnedTool(
     },
     (args) => handler(args as Record<string, unknown>),
   );
+}
+
+/** Structured `error_info` payload derived from the typed BRP error. */
+function brpErrorInfo(error: BrpError): Record<string, unknown> {
+  if (error instanceof BrpJsonRpcError) {
+    const info: Record<string, unknown> = { code: error.code, message: error.message };
+    if (error.data !== undefined) info.data = error.data;
+    return info;
+  }
+  if (error instanceof BrpHttpError) {
+    return { http_status: error.status, message: error.message };
+  }
+  return { message: error.message };
+}
+
+/**
+ * Register one direct BRP passthrough tool: the MCP tool always calls the one
+ * fixed BRP method named in `definition` (never a caller-supplied method).
+ * `port` is extracted for routing (defaulting to DEFAULT_BRP_PORT); the
+ * remaining fields are forwarded as the BRP `params` object.
+ */
+export function registerDirectBrpTool(
+  server: McpServer,
+  services: BevyMcpServices,
+  catalog: ToolContractCatalog,
+  definition: { name: string; method: string },
+): void {
+  registerOwnedTool(server, catalog, definition.name, async (args) => {
+    const { port: portArg, ...params } = args;
+    const port = typeof portArg === 'number' ? portArg : DEFAULT_BRP_PORT;
+    const callInfo: CallInfo = { mcp_tool: definition.name, brp_method: definition.method };
+    // Port is materialized like upstream's serde default, so responses always
+    // carry the effective routing port; toolSuccess strips null optionals.
+    const parameters = { ...args, port };
+    try {
+      const result = await services.brp.call(
+        definition.method,
+        Object.keys(params).length > 0 ? params : undefined,
+        { port },
+      );
+      return toolSuccess(callInfo, `BRP call '${definition.method}' succeeded`, {
+        parameters,
+        result,
+      });
+    } catch (error) {
+      if (!(error instanceof BrpError)) throw error;
+      return toolError(callInfo, error.message, {
+        parameters,
+        error_info: brpErrorInfo(error),
+      });
+    }
+  });
+}
+
+/** Register every direct world/resource BRP tool from the fixed mappings. */
+export function registerDirectTools(
+  server: McpServer,
+  services: BevyMcpServices,
+  catalog: ToolContractCatalog,
+): void {
+  for (const [name, method] of Object.entries({ ...WORLD_DIRECT, ...RESOURCE_DIRECT })) {
+    registerDirectBrpTool(server, services, catalog, { name, method });
+  }
 }
