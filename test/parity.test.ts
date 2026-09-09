@@ -8,8 +8,9 @@ import {
   type CapturedToolContract,
   type ToolContractCatalog,
 } from '../src/tool-contracts.js';
-import { registerDirectTools, registerOwnedTool } from '../src/tools/register.js';
+import { registerDirectTools, registerExtrasTools, registerOwnedTool } from '../src/tools/register.js';
 import { toolSuccess } from '../src/tools/response.js';
+import { EXTRAS_DIRECT } from '../src/tools/extras.js';
 import { RESOURCE_DIRECT } from '../src/tools/resources.js';
 import { createOwnedServer } from '../src/server.js';
 import { WORLD_DIRECT } from '../src/tools/world.js';
@@ -79,15 +80,21 @@ test('locally registered tool names outside the captured contract are rejected',
   assert.equal(Object.keys(registeredTools(server)).length, 0);
 });
 
-test('all direct tools advertise their captured contract over a real tools/list', async () => {
+test('all direct and extras tools advertise their captured contract over a real tools/list', async () => {
   const catalog = loadToolContractCatalog();
   const server = new McpServer({ name: 'parity-direct', version: '0.0.0' });
   registerDirectTools(server, createServices(), catalog);
+  registerExtrasTools(server, createServices(), catalog);
   const client = new Client({ name: 'parity-direct-client', version: '0.0.0' });
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
   await Promise.all([server.connect(clientTransport), client.connect(serverTransport)]);
   try {
-    const directNames = [...Object.keys(WORLD_DIRECT), ...Object.keys(RESOURCE_DIRECT)];
+    const directNames = [
+    ...Object.keys(WORLD_DIRECT),
+    ...Object.keys(RESOURCE_DIRECT),
+    ...Object.keys(EXTRAS_DIRECT),
+    'brp_extras_screenshot',
+  ];
     const { tools } = await client.listTools();
     assert.equal(tools.length, directNames.length);
     for (const name of directNames) {
@@ -114,12 +121,12 @@ test('all direct tools advertise their captured contract over a real tools/list'
   }
 });
 
-test('the owned server registers exactly the 22 implemented contract tools', () => {
+test('the owned server registers exactly the 36 implemented contract tools', () => {
   const catalog = loadToolContractCatalog();
   const { server } = createOwnedServer();
   const knownNames = new Set(catalog.names());
   for (const name of Object.keys(registeredTools(server))) {
     assert.ok(knownNames.has(name), `non-contract tool registered: ${name}`);
   }
-  assert.equal(Object.keys(registeredTools(server)).length, 22);
+  assert.equal(Object.keys(registeredTools(server)).length, 36);
 });

@@ -12,6 +12,7 @@ import { RESOURCE_DIRECT } from './resources.js';
 import { WORLD_DIRECT } from './world.js';
 import { findEntitiesByNameHandler } from './discovery.js';
 import { executeHandler, listAgentToolsHandler } from './agent-tools.js';
+import { EXTRAS_DIRECT, screenshotHandler } from './extras.js';
 import { allTypeGuidesHandler, typeGuideHandler } from './type-guides/index.js';
 
 /** Handler for an owned tool: receives the raw MCP call arguments. */
@@ -80,6 +81,21 @@ export function registerDirectBrpTool(
       });
     }
   });
+}
+
+/**
+ * Register the 13 direct extras passthrough tools plus the
+ * `brp_extras_screenshot` composite.
+ */
+export function registerExtrasTools(
+  server: McpServer,
+  services: BevyMcpServices,
+  catalog: ToolContractCatalog,
+): void {
+  for (const [name, method] of Object.entries(EXTRAS_DIRECT)) {
+    registerDirectBrpTool(server, services, catalog, { name, method });
+  }
+  registerOwnedTool(server, catalog, 'brp_extras_screenshot', screenshotHandler(services));
 }
 
 /** Register every direct world/resource BRP tool from the fixed mappings. */
