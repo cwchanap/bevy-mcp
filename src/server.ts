@@ -5,6 +5,7 @@ import {
   registerDiscoveryTools,
   registerExtrasTools,
   registerTypeGuideTools,
+  registerWatchTools,
 } from './tools/register.js';
 
 /** The owned MCP server plus the shared services its tools use. */
@@ -15,9 +16,10 @@ export interface OwnedServer {
 
 /**
  * Assemble the repository-owned MCP server: shared services plus every tool
- * implemented so far (direct, discovery, type-guide, and extras tools),
- * all registered through `registerOwnedTool` from the captured contract.
- * Only tools present in the captured contract may ever be registered here.
+ * implemented so far (direct, discovery, type-guide, extras, and watch
+ * tools), all registered through `registerOwnedTool` from the captured
+ * contract. Only tools present in the captured contract may ever be
+ * registered here.
  */
 export function createOwnedServer(): OwnedServer {
   const services = createServices();
@@ -29,5 +31,6 @@ export function createOwnedServer(): OwnedServer {
   registerDiscoveryTools(server, services, services.catalog);
   registerTypeGuideTools(server, services, services.catalog);
   registerExtrasTools(server, services, services.catalog);
+  registerWatchTools(server, services, services.catalog);
   return { server, services };
 }

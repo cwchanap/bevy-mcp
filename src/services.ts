@@ -1,11 +1,8 @@
 import { BrpClient } from './brp/client.js';
+import { LogStore } from './runtime/log-store.js';
+import { WatchManager } from './runtime/watch-manager.js';
 import type { ToolContractCatalog } from './tool-contracts.js';
 import { loadToolContractCatalog } from './tool-contracts.js';
-
-/** Watches lifecycle (native `world.get/list_components+watch` SSE streams). */
-export interface WatchService {
-  stopAll(): Promise<void>;
-}
 
 /** Referenced Bevy child-process tracking and shutdown. */
 export interface ProcessService {
@@ -16,22 +13,23 @@ export interface ProcessService {
 export interface BevyMcpServices {
   brp: BrpClient;
   catalog: ToolContractCatalog;
-  watches: WatchService;
+  logStore: LogStore;
+  watches: WatchManager;
   processes: ProcessService;
 }
 
 /**
- * Create the shared services. `watches` and `processes` are no-op stubs until
- * the watch and process-management tasks replace them; `catalog` is final.
+ * Create the shared services. `processes` is a no-op stub until the
+ * process-management task replaces it; everything else is final.
  */
 export function createServices(): BevyMcpServices {
+  const brp = new BrpClient();
+  const logStore = new LogStore();
   return {
-    brp: new BrpClient(),
+    brp,
     catalog: loadToolContractCatalog(),
-    watches: {
-      // ponytail: stub until the watch task lands; owned-index cleanup order already codes the contract
-      stopAll: async () => {},
-    },
+    logStore,
+    watches: new WatchManager(logStore, brp),
     processes: {
       // ponytail: stub until the process-tracking task lands; owned-index cleanup order already codes the contract
       shutdownAll: async () => {},
