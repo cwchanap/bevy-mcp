@@ -1,4 +1,5 @@
 import { BrpClient } from './brp/client.js';
+import { CargoRuntime } from './runtime/cargo.js';
 import { LogStore } from './runtime/log-store.js';
 import { WatchManager } from './runtime/watch-manager.js';
 import type { ToolContractCatalog } from './tool-contracts.js';
@@ -12,6 +13,7 @@ export interface ProcessService {
 /** Shared service objects handed to every owned tool. */
 export interface BevyMcpServices {
   brp: BrpClient;
+  cargo: CargoRuntime;
   catalog: ToolContractCatalog;
   logStore: LogStore;
   watches: WatchManager;
@@ -27,6 +29,7 @@ export function createServices(): BevyMcpServices {
   const logStore = new LogStore();
   return {
     brp,
+    cargo: new CargoRuntime(),
     catalog: loadToolContractCatalog(),
     logStore,
     watches: new WatchManager(logStore, brp),
