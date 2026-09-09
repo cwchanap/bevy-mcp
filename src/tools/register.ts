@@ -14,6 +14,12 @@ import { findEntitiesByNameHandler } from './discovery.js';
 import { executeHandler, listAgentToolsHandler } from './agent-tools.js';
 import { EXTRAS_DIRECT, screenshotHandler } from './extras.js';
 import { allTypeGuidesHandler, typeGuideHandler } from './type-guides/index.js';
+import {
+  getComponentsWatchHandler,
+  listActiveWatchesHandler,
+  listComponentsWatchHandler,
+  stopWatchHandler,
+} from './watches.js';
 
 /** Handler for an owned tool: receives the raw MCP call arguments. */
 export type OwnedToolHandler = (args: Record<string, unknown>) => Promise<CallToolResult>;
@@ -135,4 +141,19 @@ export function registerTypeGuideTools(
 ): void {
   registerOwnedTool(server, catalog, 'brp_type_guide', typeGuideHandler(services));
   registerOwnedTool(server, catalog, 'brp_all_type_guides', allTypeGuidesHandler(services));
+}
+
+/**
+ * Register the four watch tools: two native `+watch` SSE stream starters and
+ * the local active-watch listing/stop tools.
+ */
+export function registerWatchTools(
+  server: McpServer,
+  services: BevyMcpServices,
+  catalog: ToolContractCatalog,
+): void {
+  registerOwnedTool(server, catalog, 'world_get_components_watch', getComponentsWatchHandler(services));
+  registerOwnedTool(server, catalog, 'world_list_components_watch', listComponentsWatchHandler(services));
+  registerOwnedTool(server, catalog, 'brp_list_active_watches', listActiveWatchesHandler(services));
+  registerOwnedTool(server, catalog, 'brp_stop_watch', stopWatchHandler(services));
 }

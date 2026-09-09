@@ -1,9 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { tmpdir } from 'node:os';
 import { McpServer, type CallToolResult } from '@modelcontextprotocol/server';
 import { DEFAULT_BRP_PORT, type BrpCallOptions, type BrpClient } from '../src/brp/client.js';
 import { BrpError, BrpJsonRpcError } from '../src/brp/errors.js';
 import type { BevyMcpServices } from '../src/services.js';
+import { LogStore } from '../src/runtime/log-store.js';
+import type { WatchManager } from '../src/runtime/watch-manager.js';
 import { loadToolContractCatalog } from '../src/tool-contracts.js';
 import { EXTRAS_DIRECT } from '../src/tools/extras.js';
 import { registerExtrasTools } from '../src/tools/register.js';
@@ -30,7 +33,8 @@ function fakeServices(fake: FakeBrpClient): BevyMcpServices {
   return {
     brp: fake as unknown as BrpClient,
     catalog: loadToolContractCatalog(),
-    watches: { stopAll: async () => {} },
+    logStore: new LogStore(`${tmpdir()}/bevy-mcp-test-unused`),
+    watches: { stopAll: async () => {} } as unknown as WatchManager,
     processes: { shutdownAll: async () => {} },
   };
 }
