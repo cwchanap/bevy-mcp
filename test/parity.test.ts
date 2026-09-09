@@ -121,12 +121,12 @@ test('all direct and extras tools advertise their captured contract over a real 
   }
 });
 
-test('the owned server registers exactly the 40 implemented contract tools', () => {
+test('the owned server registers exactly the complete 47-tool captured catalog', () => {
   const catalog = loadToolContractCatalog();
   const { server } = createOwnedServer();
-  const knownNames = new Set(catalog.names());
-  for (const name of Object.keys(registeredTools(server))) {
-    assert.ok(knownNames.has(name), `non-contract tool registered: ${name}`);
-  }
-  assert.equal(Object.keys(registeredTools(server)).length, 40);
+  const registered = Object.keys(registeredTools(server)).sort();
+  const captured = catalog.names().sort();
+  // The complete default catalog: every captured name is now registered.
+  assert.deepEqual(registered, captured);
+  assert.equal(registered.length, 47);
 });

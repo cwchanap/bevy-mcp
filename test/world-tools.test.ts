@@ -7,6 +7,7 @@ import { BrpError, BrpJsonRpcError } from '../src/brp/errors.js';
 import { CargoRuntime } from '../src/runtime/cargo.js';
 import type { BevyMcpServices } from '../src/services.js';
 import { LogStore } from '../src/runtime/log-store.js';
+import { ProcessManager } from '../src/runtime/process-manager.js';
 import type { WatchManager } from '../src/runtime/watch-manager.js';
 import { loadToolContractCatalog, type ToolContractCatalog } from '../src/tool-contracts.js';
 import { registerDirectTools } from '../src/tools/register.js';
@@ -36,7 +37,9 @@ function fakeServices(fake: FakeBrpClient): BevyMcpServices {
     logStore: new LogStore(`${tmpdir()}/bevy-mcp-test-unused`),
     cargo: new CargoRuntime(),
     watches: { stopAll: async () => {} } as unknown as WatchManager,
-    processes: { shutdownAll: async () => {} },
+    processes: new ProcessManager(() => {
+      throw new Error('no spawn expected in this test');
+    }),
   };
 }
 
