@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { McpServer, type CallToolResult } from '@modelcontextprotocol/server';
 import type { BrpCallOptions, BrpClient } from '../src/brp/client.js';
+import { CargoRuntime } from '../src/runtime/cargo.js';
 import type { BevyMcpServices } from '../src/services.js';
 import { LogStore } from '../src/runtime/log-store.js';
 import { WatchManager } from '../src/runtime/watch-manager.js';
@@ -48,6 +49,7 @@ function harness(): {
     brp: brp as unknown as BrpClient,
     catalog: loadToolContractCatalog(),
     logStore,
+    cargo: new CargoRuntime(),
     watches: new WatchManager(logStore, brp as unknown as BrpClient),
     processes: { shutdownAll: async () => {} },
   };
@@ -80,6 +82,7 @@ test('registerWatchTools registers exactly the four watch tools', () => {
     {
       brp: {} as BrpClient,
       catalog: loadToolContractCatalog(),
+      cargo: new CargoRuntime(),
       logStore: new LogStore(join(BASE, 'registry-only')),
       watches: new WatchManager(new LogStore(join(BASE, 'registry-only')), {} as BrpClient),
       processes: { shutdownAll: async () => {} },

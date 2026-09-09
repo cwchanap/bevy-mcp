@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { McpServer, type CallToolResult } from '@modelcontextprotocol/server';
 import { DEFAULT_BRP_PORT, type BrpCallOptions, type BrpClient } from '../src/brp/client.js';
 import { BrpError, BrpJsonRpcError } from '../src/brp/errors.js';
+import { CargoRuntime } from '../src/runtime/cargo.js';
 import type { BevyMcpServices } from '../src/services.js';
 import { LogStore } from '../src/runtime/log-store.js';
 import type { WatchManager } from '../src/runtime/watch-manager.js';
@@ -33,6 +34,7 @@ function fakeServices(fake: FakeBrpClient): BevyMcpServices {
     brp: fake as unknown as BrpClient,
     catalog: loadToolContractCatalog(),
     logStore: new LogStore(`${tmpdir()}/bevy-mcp-test-unused`),
+    cargo: new CargoRuntime(),
     watches: { stopAll: async () => {} } as unknown as WatchManager,
     processes: { shutdownAll: async () => {} },
   };
