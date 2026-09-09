@@ -39,10 +39,39 @@ function matches(name: string, pattern: string, mode: string): boolean {
 }
 
 /**
- * MCP-local composite: one `world.query` for reflected `Name` components,
- * filtered by exact/prefix/suffix/contains (case-sensitive, literal `*`),
- * returning `{entity, name}` pairs sorted by entity ID. Asterisks are
- * ordinary characters, never wildcards.
+ * Raw one-query Name lookup: one `world.query` for reflected `Name`
+ * components, filtered by exact/prefix/suffix/contains (case-sensitive,
+ * literal `*`), returning `{entity, name}` pairs sorted by entity ID.
+ * Asterisks are ordinary characters, never wildcards. Throws `BrpError`
+ * (including the unsafe-integer entity-id rejection) on failure.
+ */
+export async function findEntitiesByName(
+  services: BevyMcpServices,
+  name: string,
+  matchMode: string,
+  port: number,
+): Promise<{ entity: number; name: string }[]> {
+  const rows = (await services.brp.call(
+    'world.query',
+    {
+      data: { components: [NAME_COMPONENT] },
+      filter: { with: [NAME_COMPONENT] },
+    },
+    { port },
+  )) as QueryRow[];
+
+  return rows
+    .map((row) => ({ entity: row.entity, name: decodeName(row) }))
+    .filter(
+      (entry): entry is { entity: number; name: string } =>
+        typeof entry.entity === 'number' && entry.name !== undefined,
+    )
+    .filter((entry) => matches(entry.name, name, matchMode))
+    .sort((a, b) => a.entity - b.entity);
+}
+
+/**
+ * MCP-local composite exposing the shared Name lookup as a tool.
  */
 export function findEntitiesByNameHandler(services: BevyMcpServices): OwnedToolHandler {
   return async (args) => {
@@ -59,23 +88,7 @@ export function findEntitiesByNameHandler(services: BevyMcpServices): OwnedToolH
     }
 
     try {
-      const rows = (await services.brp.call(
-        'world.query',
-        {
-          data: { components: [NAME_COMPONENT] },
-          filter: { with: [NAME_COMPONENT] },
-        },
-        { port },
-      )) as QueryRow[];
-
-      const result = rows
-        .map((row) => ({ entity: row.entity, name: decodeName(row) }))
-        .filter(
-          (entry): entry is { entity: number; name: string } =>
-            typeof entry.entity === 'number' && entry.name !== undefined,
-        )
-        .filter((entry) => matches(entry.name, name, matchMode))
-        .sort((a, b) => a.entity - b.entity);
+      const result = await findEntitiesByName(services, name, matchMode, port);
 
       return toolSuccess(callInfo, `Found ${result.length} named entities`, {
         metadata: { entity_count: result.length },
