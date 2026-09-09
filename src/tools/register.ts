@@ -12,6 +12,17 @@ import { RESOURCE_DIRECT } from './resources.js';
 import { WORLD_DIRECT } from './world.js';
 import { findEntitiesByNameHandler } from './discovery.js';
 import { executeHandler, listAgentToolsHandler } from './agent-tools.js';
+import {
+  deleteLogsHandler,
+  listLogsHandler,
+  readLogHandler,
+} from './logs.js';
+import {
+  launchHandler,
+  listBevyHandler,
+  shutdownHandler,
+  statusHandler,
+} from './app.js';
 import { EXTRAS_DIRECT, screenshotHandler } from './extras.js';
 import { allTypeGuidesHandler, typeGuideHandler } from './type-guides/index.js';
 import {
@@ -156,4 +167,34 @@ export function registerWatchTools(
   registerOwnedTool(server, catalog, 'world_list_components_watch', listComponentsWatchHandler(services));
   registerOwnedTool(server, catalog, 'brp_list_active_watches', listActiveWatchesHandler(services));
   registerOwnedTool(server, catalog, 'brp_stop_watch', stopWatchHandler(services));
+}
+
+/**
+ * Register the four process/app lifecycle tools: target discovery, launch,
+ * live status, and graceful-then-terminating shutdown.
+ */
+export function registerAppTools(
+  server: McpServer,
+  services: BevyMcpServices,
+  catalog: ToolContractCatalog,
+): void {
+  registerOwnedTool(server, catalog, 'brp_list_bevy', listBevyHandler(services));
+  registerOwnedTool(server, catalog, 'brp_launch', launchHandler(services));
+  registerOwnedTool(server, catalog, 'brp_status', statusHandler(services));
+  registerOwnedTool(server, catalog, 'brp_shutdown', shutdownHandler(services));
+}
+
+/**
+ * Register the three log tools with their exact public contracts. Callers
+ * only pass bare filenames, app names, and ages — never absolute paths or
+ * BRP ports.
+ */
+export function registerLogTools(
+  server: McpServer,
+  services: BevyMcpServices,
+  catalog: ToolContractCatalog,
+): void {
+  registerOwnedTool(server, catalog, 'brp_list_logs', listLogsHandler(services));
+  registerOwnedTool(server, catalog, 'brp_read_log', readLogHandler(services));
+  registerOwnedTool(server, catalog, 'brp_delete_logs', deleteLogsHandler(services));
 }

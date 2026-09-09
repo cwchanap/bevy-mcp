@@ -8,6 +8,7 @@ import type { BrpCallOptions, BrpClient } from '../src/brp/client.js';
 import { CargoRuntime } from '../src/runtime/cargo.js';
 import type { BevyMcpServices } from '../src/services.js';
 import { LogStore } from '../src/runtime/log-store.js';
+import { ProcessManager } from '../src/runtime/process-manager.js';
 import { WatchManager } from '../src/runtime/watch-manager.js';
 import { loadToolContractCatalog } from '../src/tool-contracts.js';
 import { registerWatchTools } from '../src/tools/register.js';
@@ -51,7 +52,9 @@ function harness(): {
     logStore,
     cargo: new CargoRuntime(),
     watches: new WatchManager(logStore, brp as unknown as BrpClient),
-    processes: { shutdownAll: async () => {} },
+    processes: new ProcessManager(() => {
+      throw new Error('no spawn expected in this test');
+    }),
   };
   const server = new McpServer({ name: 't', version: '0.0.0' });
   registerWatchTools(server, services, loadToolContractCatalog());
@@ -85,7 +88,9 @@ test('registerWatchTools registers exactly the four watch tools', () => {
       cargo: new CargoRuntime(),
       logStore: new LogStore(join(BASE, 'registry-only')),
       watches: new WatchManager(new LogStore(join(BASE, 'registry-only')), {} as BrpClient),
-      processes: { shutdownAll: async () => {} },
+      processes: new ProcessManager(() => {
+        throw new Error('no spawn expected in this test');
+      }),
     },
     loadToolContractCatalog(),
   );
