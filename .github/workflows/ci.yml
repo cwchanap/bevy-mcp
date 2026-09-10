@@ -130,6 +130,13 @@ jobs:
       - name: Real MCP client integration
         run: xvfb-run -a npm run test:integration
 
+      - name: Unit tests (fixture-gated enabled)
+        # No BEVY_MCP_SKIP_FIXTURE_TESTS here: this job has the Rust toolchain
+        # and Bevy system deps, so cargo.test.ts and type-guides-parity.test.ts
+        # must run for real. Runs after test:integration so build/index.js and
+        # the compiled fixture already exist. xvfb: the fixture opens a window.
+        run: xvfb-run -a npm test
+
   publish:
     name: Publish to npm
     runs-on: ubuntu-latest

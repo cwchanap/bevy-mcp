@@ -27,7 +27,9 @@ const LAUNCH_TIMEOUT = 300_000; // first run may compile the fixture
 const READY_TIMEOUT = 60_000;
 const EXIT_TIMEOUT = 20_000;
 
-// Suffix-resolved full type names (resolved live from world_list_components).
+// Suffix-resolved full type names (components resolve live from
+// world_list_components; FixtureState is a Resource and resolves from
+// world_list_resources).
 const MARKER_SUFFIX = '::FixtureMarker';
 const VALUE_SUFFIX = '::FixtureValue';
 const MODE_SUFFIX = '::FixtureMode';
@@ -188,7 +190,6 @@ async function runJourney() {
     const bySuffix = (suffix) => componentTypes.find((name) => name.endsWith(suffix));
     const valueType = bySuffix(VALUE_SUFFIX);
     const modeType = bySuffix(MODE_SUFFIX);
-    const stateType = bySuffix(STATE_SUFFIX);
     log(`discovered component ${markerType}`);
 
     // --- world query + name find ---------------------------------------------
@@ -209,7 +210,11 @@ async function runJourney() {
 
     // --- resources: list, get, insert, mutate --------------------------------
     const resources = await call('world_list_resources', { port: PORT });
-    assert.ok(resources?.result?.includes(stateType), `expected ${stateType} among resources`);
+    const resourceTypes = resources?.result ?? [];
+    // FixtureState carries Reflect(Resource), not Reflect(Component): resolve
+    // its full type name from the resource list, not world_list_components.
+    const stateType = resourceTypes.find((name) => name.endsWith(STATE_SUFFIX));
+    assert.ok(resourceTypes.includes(stateType), `expected ${STATE_SUFFIX} among resources`);
     const gotResource = await call('world_get_resources', { resource: stateType, port: PORT });
     assert.equal(gotResource?.result?.value?.counter, 0);
     await call('world_insert_resources', {

@@ -51,6 +51,8 @@ const SSE_DATA_PREFIX = 'data: ';
 
 interface ActiveEntry extends ActiveWatch {
   controller: AbortController;
+  /** Serializes log appends so records keep stream order end-to-end. */
+  pending: Promise<void>;
 }
 
 /**
@@ -210,6 +212,7 @@ export class WatchManager {
       filename,
       path,
       controller,
+      pending: Promise.resolve(),
     };
     await appendRecord(path, 'WATCH_STARTED', { ...params, port, timestamp: new Date().toISOString() });
     this.#active.set(id, entry);
@@ -219,12 +222,17 @@ export class WatchManager {
 
   /** Background stream loop: append update records until end/error/abort. */
   async #pump(entry: ActiveEntry, response: Response): Promise<void> {
+    // Every record append chains onto the entry's queue: update/error records
+    // are persisted in stream order and WATCH_ENDED is written last.
+    const enqueue = (updateType: string, data: unknown): void => {
+      entry.pending = entry.pending.then(() => appendRecord(entry.path, updateType, data));
+    };
     const onLine = (line: string): void => {
       const parsed = parseSseDataLine(line);
       if (parsed.ok) {
-        void appendRecord(entry.path, 'COMPONENT_UPDATE', parsed.result);
+        enqueue('COMPONENT_UPDATE', parsed.result);
       } else if ('unsafe' in parsed) {
-        void appendRecord(entry.path, 'ERROR', {
+        enqueue('ERROR', {
           watch_type: WATCH_TYPES[entry.kind],
           entity: entry.entity,
           error: parsed.error,
@@ -254,7 +262,7 @@ export class WatchManager {
       if (tail !== undefined) onLine(tail);
     } catch (error) {
       if (!entry.controller.signal.aborted) {
-        await appendRecord(entry.path, 'CONNECTION_ERROR', {
+        enqueue('CONNECTION_ERROR', {
           watch_type: WATCH_TYPES[entry.kind],
           entity: entry.entity,
           error: error instanceof Error ? error.message : String(error),
@@ -262,6 +270,7 @@ export class WatchManager {
         });
       }
     }
+    await entry.pending;
     await appendRecord(entry.path, 'WATCH_ENDED', {
       entity: entry.entity,
       timestamp: new Date().toISOString(),

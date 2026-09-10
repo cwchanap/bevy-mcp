@@ -125,11 +125,15 @@ test('type-guide parity against the live fixture', { skip: SKIP_FIXTURE_TESTS },
   t.after(async () => {
     // No orphan: the fixture must be dead before the test file ends.
     fixture.kill('SIGTERM');
+    const exited = new Promise((resolve) => fixture.once('exit', resolve));
     const exit = await Promise.race([
-      new Promise((resolve) => fixture.once('exit', resolve)),
+      exited,
       new Promise((resolve) => setTimeout(() => resolve('timeout'), 5_000)),
     ]);
-    if (exit === 'timeout') fixture.kill('SIGKILL');
+    if (exit === 'timeout') {
+      fixture.kill('SIGKILL');
+      await exited; // reap the killed fixture before returning
+    }
   });
 
   const { server } = createOwnedServer();

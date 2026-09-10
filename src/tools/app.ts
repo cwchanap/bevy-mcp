@@ -119,10 +119,13 @@ async function brpLevelFor(target: BevyTarget): Promise<BrpLevel> {
  * artifacts). Ported from upstream `create_builds_json` (MIT).
  */
 function buildsFor(target: BevyTarget): Record<string, { path: string; built: boolean }> {
-  const predicted = (profile: string): string =>
-    target.kind === 'example'
-      ? join(target.workspaceRoot, 'target', profile, 'examples', target.name)
-      : join(target.workspaceRoot, 'target', profile, target.name);
+  const predicted = (profile: string): string => {
+    const artifact =
+      target.kind === 'example'
+        ? join(target.workspaceRoot, 'target', profile, 'examples', target.name)
+        : join(target.workspaceRoot, 'target', profile, target.name);
+    return process.platform === 'win32' ? `${artifact}.exe` : artifact;
+  };
   return {
     debug: { path: predicted('debug'), built: existsSync(predicted('debug')) },
     release: { path: predicted('release'), built: existsSync(predicted('release')) },
@@ -333,18 +336,29 @@ export function launchHandler(services: BevyMcpServices): OwnedToolHandler {
       const launchDurationMs = Date.now() - buildStarted;
 
       const instances: { pid: number; log_file: string; port: number }[] = [];
-      for (const port of plan.ports) {
-        const log = await services.logStore.createAppLog(plan.targetName);
-        const tracked = services.processes.launch({
-          appName: plan.targetName,
-          executable,
-          args: plan.args,
-          env: { ...plan.env, CARGO_MANIFEST_DIR: target.packageRoot },
-          port,
-          logPath: log.path,
-          cwd: target.packageRoot,
-        });
-        instances.push({ pid: tracked.pid, log_file: log.path, port });
+      const started: TrackedProcess[] = [];
+      try {
+        for (const port of plan.ports) {
+          const log = await services.logStore.createAppLog(plan.targetName);
+          const tracked = services.processes.launch({
+            appName: plan.targetName,
+            executable,
+            args: plan.args,
+            env: { ...plan.env, CARGO_MANIFEST_DIR: target.packageRoot },
+            port,
+            logPath: log.path,
+            cwd: target.packageRoot,
+          });
+          started.push(tracked);
+          instances.push({ pid: tracked.pid, log_file: log.path, port });
+        }
+      } catch (error) {
+        // A partial launch must not leave already-spawned instances running:
+        // terminate every child this request started before reporting failure.
+        await Promise.allSettled(
+          started.map((child) => services.processes.terminate(child)),
+        );
+        throw error;
       }
 
       const portRange =
@@ -448,12 +462,15 @@ export function statusHandler(services: BevyMcpServices): OwnedToolHandler {
       return toolError(callInfo, 'app_name is required', { parameters: args });
     }
     const portProvided = typeof args.port === 'number';
-    const port = portProvided ? (args.port as number) : DEFAULT_BRP_PORT;
-    const selection = selectInstance(services.processes, appName, port, portProvided);
+    const requestedPort = portProvided ? (args.port as number) : DEFAULT_BRP_PORT;
+    const selection = selectInstance(services.processes, appName, requestedPort, portProvided);
     if (selection.ambiguous) {
       return ambiguousInstanceError(callInfo, appName, selection.ambiguous, args);
     }
     const tracked = selection.tracked;
+    // An omitted port targets the selected instance's own port; the default
+    // applies only when nothing tracked is selected (foreign-process probe).
+    const port = tracked?.port ?? requestedPort;
     const responding = await isBrpResponding(services, port);
 
     if (tracked) {
@@ -494,12 +511,15 @@ export function shutdownHandler(services: BevyMcpServices): OwnedToolHandler {
       return toolError(callInfo, 'app_name is required', { parameters: args });
     }
     const portProvided = typeof args.port === 'number';
-    const port = portProvided ? (args.port as number) : DEFAULT_BRP_PORT;
-    const selection = selectInstance(services.processes, appName, port, portProvided);
+    const requestedPort = portProvided ? (args.port as number) : DEFAULT_BRP_PORT;
+    const selection = selectInstance(services.processes, appName, requestedPort, portProvided);
     if (selection.ambiguous) {
       return ambiguousInstanceError(callInfo, appName, selection.ambiguous, args);
     }
     const tracked = selection.tracked;
+    // Same effective-port rule as brp_status: the selected instance's own
+    // port wins over the default when `port` was omitted.
+    const port = tracked?.port ?? requestedPort;
 
     let brpShutdown = false;
     let responsePid: number | undefined;

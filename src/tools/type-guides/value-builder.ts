@@ -410,7 +410,11 @@ function extractArraySize(typeName: string): number | undefined {
   const sizeStr = typeName.slice(semi + 2, close);
   if (!/^\d+$/.test(sizeStr)) return undefined;
   const size = Number(sizeStr);
-  return Number.isInteger(size) && size >= 0 ? size : undefined;
+  // Upstream parses the digits into `usize`: an overflowing literal fails the
+  // parse and falls back to the default length. JS has no usize — the safe-
+  // integer bound is the closest faithful equivalent (past it the digits no
+  // longer round-trip exactly, and `Array.from` could never produce them).
+  return Number.isSafeInteger(size) && size >= 0 ? size : undefined;
 }
 
 /** Complex (non-primitive) values cannot be map keys or set elements. */

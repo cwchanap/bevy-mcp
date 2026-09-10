@@ -260,8 +260,9 @@ test('valid results become COMPONENT_UPDATE records; junk lines are skipped', as
 
   await until(async () => {
     const log = await logStore.read(watch.filename);
-    return log.content.split('COMPONENT_UPDATE').length === 3; // WATCH_STARTED + 2 updates + ENDED
-  }, 'two COMPONENT_UPDATE records');
+    // WATCH_STARTED + 2 updates + the WATCH_ENDED lifecycle marker.
+    return log.content.split('COMPONENT_UPDATE').length === 3 && log.content.includes('WATCH_ENDED');
+  }, 'two COMPONENT_UPDATE records and the end marker');
 
   const log = await logStore.read(watch.filename);
   assert.ok(log.content.includes('"components":["A"]'));
@@ -284,8 +285,9 @@ test('updates split across chunk boundaries are parsed', async () => {
 
   await until(async () => {
     const log = await logStore.read(watch.filename);
-    return log.content.includes('C1');
-  }, 'split update record');
+    // The update record AND the finished cleanup (ended + deregistered).
+    return log.content.includes('C1') && manager.list().length === 0;
+  }, 'split update record and watch deregistration');
   assert.deepEqual(manager.list(), []);
 });
 
