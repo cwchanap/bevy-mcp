@@ -99,12 +99,23 @@ export function listAgentToolsHandler(services: BevyMcpServices): OwnedToolHandl
       const fetched = await services.brp.call('brp_extras/agent_tools', undefined, { port });
       // Upstream decodes the catalog wire shape and re-publishes exactly
       // `{usage, tools}` — the wire `version` envelope is not part of the
-      // public result.
-      const fetchedRecord: Record<string, unknown> =
-        typeof fetched === 'object' && fetched !== null
-          ? (fetched as Record<string, unknown>)
-          : {};
-      const tools = Array.isArray(fetchedRecord['tools']) ? fetchedRecord['tools'] : [];
+      // public result. A response that is not an object carrying a tools
+      // array is a malformed catalog: fail like a fetch failure rather than
+      // reporting a successful empty list.
+      const tools =
+        fetched !== null && typeof fetched === 'object'
+          ? (fetched as Record<string, unknown>)['tools']
+          : undefined;
+      if (!Array.isArray(tools)) {
+        return toolError(callInfo, `Unable to fetch the agent tool catalog from port ${port}`, {
+          metadata: {
+            stage: 'catalog_fetch',
+            method: 'brp_extras/agent_tools',
+            port,
+            error: 'catalog response is not an object with a tools array',
+          },
+        });
+      }
       const result = { usage: AGENT_TOOLS_USAGE, tools };
       const count = tools.length;
       return toolSuccess(callInfo, `Listed ${count} agent tools`, {

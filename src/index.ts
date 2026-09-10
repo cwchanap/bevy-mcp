@@ -6,20 +6,23 @@ export async function main(): Promise<void> {
   const { server, services } = createOwnedServer();
 
   // Contractual cleanup order (CLAUDE.md): watches -> processes -> server.
-  // Idempotent: EOF, signals, and explicit closes must not run it twice.
+  // Idempotent: EOF, signals, and explicit closes share ONE in-flight run —
+  // every caller awaits the same promise, so a signal arriving during an
+  // EOF-triggered cleanup still waits for it to finish before exiting.
   // Never rejects: failures go to stderr, never surface as unhandled
   // rejections (the signal paths exit explicitly right after).
-  let cleanedUp = false;
-  const cleanup = async (): Promise<void> => {
-    if (cleanedUp) return;
-    cleanedUp = true;
-    try {
-      await services.watches.stopAll();
-      await services.processes.shutdownAll();
-      await server.close();
-    } catch (error) {
-      console.error(error);
-    }
+  let cleanupPromise: Promise<void> | undefined;
+  const cleanup = (): Promise<void> => {
+    cleanupPromise ??= (async () => {
+      try {
+        await services.watches.stopAll();
+        await services.processes.shutdownAll();
+        await server.close();
+      } catch (error) {
+        console.error(error);
+      }
+    })();
+    return cleanupPromise;
   };
 
   // StdioServerTransport does not watch for stdin EOF itself; on EOF run the

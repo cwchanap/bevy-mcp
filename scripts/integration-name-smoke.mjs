@@ -67,6 +67,7 @@ async function main() {
   fixture.stderr.on('data', (chunk) => fixtureLog.push(chunk));
   let exitCode = 1;
   let serverPid;
+  let client;
 
   try {
     fixture.on('exit', (code) => log(`fixture exited (code ${code})`));
@@ -83,7 +84,7 @@ async function main() {
       // like the production wrapper does.
       env: { ...process.env },
     });
-    const client = new Client({ name: 'bevy-plugin-name-smoke', version: '1.0.0' });
+    client = new Client({ name: 'bevy-plugin-name-smoke', version: '1.0.0' });
     await client.connect(transport);
     serverPid = transport.pid;
     log(`connected to build/index.js (pid ${serverPid})`);
@@ -110,18 +111,22 @@ async function main() {
       `entity id must be a safe positive integer, got ${match.entity}`,
     );
     log(`PASS: FixturePrimary is entity ${match.entity}`);
-
-    await client.close();
     exitCode = 0;
   } catch (err) {
     console.error(`[name-smoke] FAIL: ${err.message}`);
     const tail = fixtureLog.join('').split('\n').slice(-30).join('\n');
     if (tail.trim()) console.error(`[name-smoke] fixture log tail:\n${tail}`);
   } finally {
+    // The transport must close even when assertions fail above; close() runs
+    // the SDK's stdin-EOF -> SIGTERM -> SIGKILL teardown.
+    await client?.close().catch(() => {});
     if (serverPid) {
       try {
         process.kill(serverPid, 0);
-        console.error(`[name-smoke] WARNING: owned server ${serverPid} still running after close`);
+        console.error(
+          `[name-smoke] WARNING: owned server ${serverPid} still running after close; sending SIGKILL`,
+        );
+        process.kill(serverPid, 'SIGKILL');
         exitCode = 1;
       } catch {
         // exited as expected

@@ -48,9 +48,20 @@ function processAlive(pid) {
   }
 }
 
+/** Poll until the pid is gone or the deadline passes; true = exited. */
+async function waitForExit(pid, timeoutMs) {
+  const deadline = Date.now() + timeoutMs;
+  while (processAlive(pid) && Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, 250));
+  }
+  return !processAlive(pid);
+}
+
 async function main() {
   const tmpDir = await mkdtemp(path.join(tmpdir(), 'bevy-plugin-smoke-'));
   let serverPid;
+  let client;
+  let serverLeaked = false;
   try {
     log('npm pack into temp dir');
     const packJson = await run(
@@ -70,7 +81,7 @@ async function main() {
 
     const binPath = path.join(tmpDir, 'node_modules', '.bin', 'bevy-plugin');
     log('connecting to the packed bevy-plugin bin over stdio MCP');
-    const client = new Client({ name: 'bevy-plugin-smoke', version: '1.0.0' });
+    client = new Client({ name: 'bevy-plugin-smoke', version: '1.0.0' });
     const transport = new StdioClientTransport({
       command: binPath,
       cwd: tmpDir,
@@ -101,18 +112,32 @@ async function main() {
       assert.deepEqual(advertised.outputSchema, captured.outputSchema, `${captured.name}: outputSchema`);
     }
     log(`all ${contract.length} tools verified against the captured contract`);
-
-    await client.close();
-    log('client closed; waiting for the packed server to exit');
-    const deadline = Date.now() + EXIT_TIMEOUT;
-    while (processAlive(serverPid) && Date.now() < deadline) {
-      await new Promise((resolve) => setTimeout(resolve, 250));
-    }
-    assert.ok(!processAlive(serverPid), `packed server ${serverPid} must exit after close`);
-    log(`packed server ${serverPid} exited cleanly`);
   } finally {
+    if (client !== undefined) {
+      try {
+        await client.close();
+      } finally {
+        // Whether assertions passed or failed, the packed server must not
+        // outlive this script: close was issued, so give it the exit window,
+        // then terminate it and await the reap before exiting.
+        if (serverPid !== undefined) {
+          log('client closed; waiting for the packed server to exit');
+          if (await waitForExit(serverPid, EXIT_TIMEOUT)) {
+            log(`packed server ${serverPid} exited cleanly`);
+          } else {
+            console.error(
+              `[smoke:packed] WARNING: packed server ${serverPid} still running after close; sending SIGKILL`,
+            );
+            process.kill(serverPid, 'SIGKILL');
+            await waitForExit(serverPid, 5_000);
+            serverLeaked = true;
+          }
+        }
+      }
+    }
     await rm(tmpDir, { recursive: true, force: true });
   }
+  assert.ok(!serverLeaked, `packed server ${serverPid} must exit after close`);
 }
 
 main()

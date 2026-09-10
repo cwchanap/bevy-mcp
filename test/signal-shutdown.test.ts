@@ -37,15 +37,28 @@ interface Exit {
   stderr: string;
 }
 
+const READY_TIMEOUT_MS = 10_000;
+
 /** Spawn the server and resolve once its initialize response arrives. */
 function startServerUntilReady(): Promise<{ child: ChildProcess; exited: Promise<Exit> }> {
   return new Promise((resolve, reject) => {
     const child = spawn(process.execPath, [ENTRY], { stdio: ['pipe', 'pipe', 'pipe'] });
     let stderr = '';
     let stdout = '';
+    let timedOut = false;
+    // Bound the readiness wait: a server that never answers initialize is
+    // killed and reaped, then the timeout rejects — no hanging test or leak.
+    const readinessTimer = setTimeout(() => {
+      timedOut = true;
+      child.kill('SIGKILL');
+      void new Promise((res) => child.once('exit', res)).then(() =>
+        reject(new Error(`server did not answer initialize within ${READY_TIMEOUT_MS}ms`)),
+      );
+    }, READY_TIMEOUT_MS);
     const onStdout = (chunk: Buffer): void => {
       stdout += chunk.toString('utf8');
       if (stdout.includes('"id":1')) {
+        clearTimeout(readinessTimer);
         child.stdout!.off('data', onStdout);
         resolve({
           child,
@@ -64,9 +77,13 @@ function startServerUntilReady(): Promise<{ child: ChildProcess; exited: Promise
     child.stderr!.on('data', (c) => {
       stderrAll += c;
     });
-    child.once('exit', (code, signal) =>
-      reject(new Error(`server exited before readiness (exit ${code} ${signal}): ${stderrAll}`)),
-    );
+    child.once('exit', (code, signal) => {
+      clearTimeout(readinessTimer);
+      // After a readiness timeout the timer's own path reports the failure
+      // once the killed child has been reaped.
+      if (timedOut) return;
+      reject(new Error(`server exited before readiness (exit ${code} ${signal}): ${stderrAll}`));
+    });
     child.stdin!.write(`${INITIALIZE}\n`);
   });
 }

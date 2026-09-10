@@ -89,23 +89,29 @@ function fakeCargoRunner(buildCalls: BuildCall[]): CargoRunner {
   };
 }
 
+interface FakeLaunch extends LaunchSpec {
+  process: TrackedProcess;
+  alive: boolean;
+}
+
 class FakeProcesses implements ProcessService {
-  launches: (LaunchSpec & { process: TrackedProcess })[] = [];
+  launches: FakeLaunch[] = [];
   terminated: TrackedProcess[] = [];
   /** Controls the graceful-shutdown wait: true = exited within the window. */
   waitResult = true;
 
   launch(spec: LaunchSpec): TrackedProcess {
-    const process: TrackedProcess = {
+    const entry = { ...spec, alive: true } as FakeLaunch;
+    entry.process = {
       appName: spec.appName,
       pid: 5000 + this.launches.length + 1,
       port: spec.port,
       logPath: spec.logPath,
       exited: Promise.resolve(),
-      isAlive: () => true,
+      isAlive: () => entry.alive,
     };
-    this.launches.push({ ...spec, process });
-    return process;
+    this.launches.push(entry);
+    return entry.process;
   }
 
   findByApp(appName: string): TrackedProcess[] {
@@ -120,6 +126,11 @@ class FakeProcesses implements ProcessService {
 
   async terminate(process: TrackedProcess): Promise<void> {
     this.terminated.push(process);
+    // Match ProcessManager's exit behavior: a terminated child leaves the
+    // tracked set and reports not-alive.
+    const entry = this.launches.find((candidate) => candidate.process === process);
+    if (entry !== undefined) entry.alive = false;
+    this.launches = this.launches.filter((candidate) => candidate.process !== process);
   }
 
   async shutdownAll(): Promise<void> {}
@@ -469,6 +480,15 @@ test('multiple instances: a provided port targets one child, no port is ambiguou
     ],
   });
 
+  // brp_shutdown without a port while both instances are alive: ambiguity
+  // error before any BRP traffic.
+  brp.shutdownCalls.length = 0;
+  const ambiguousShutdown = await call('brp_shutdown', { app_name: 'fixture' });
+  assert.equal(ambiguousShutdown.isError, true);
+  assert.match(envelope(ambiguousShutdown).message, /Multiple running instances of 'fixture'/);
+  assert.deepEqual(brp.shutdownCalls, [], 'no graceful call before disambiguation');
+  assert.equal(processes.terminated.length, 0, 'no termination yet');
+
   // brp_shutdown with a port: only that child is terminated.
   brp.shutdownError = new BrpError('connect ECONNREFUSED');
   const scopedShutdown = await call('brp_shutdown', { app_name: 'fixture', port: 15702 });
@@ -481,13 +501,18 @@ test('multiple instances: a provided port targets one child, no port is ambiguou
   );
   assert.deepEqual(processes.terminated.map((process) => process.pid), [5001]);
 
-  // brp_shutdown without a port: ambiguity error before any BRP traffic.
+  // After the 15702 instance exited, only the 15703 child remains: a no-port
+  // shutdown now selects it unambiguously, targeting ITS port (not 15702).
   brp.shutdownCalls.length = 0;
-  const ambiguousShutdown = await call('brp_shutdown', { app_name: 'fixture' });
-  assert.equal(ambiguousShutdown.isError, true);
-  assert.match(envelope(ambiguousShutdown).message, /Multiple running instances of 'fixture'/);
-  assert.deepEqual(brp.shutdownCalls, [], 'no graceful call before disambiguation');
-  assert.equal(processes.terminated.length, 1, 'no additional termination');
+  const remaining = await call('brp_shutdown', { app_name: 'fixture' });
+  const remainingEnv = envelope(remaining);
+  assert.equal(remainingEnv.status, 'success');
+  const remainingMetadata = remainingEnv.metadata as Record<string, unknown>;
+  assert.equal(remainingMetadata.pid, 5002);
+  assert.equal(remainingMetadata.port, 15703);
+  assert.equal(remainingMetadata.shutdown_method, 'process_kill');
+  assert.deepEqual(brp.shutdownCalls, [{ method: 'brp_extras/shutdown', port: 15703 }]);
+  assert.deepEqual(processes.terminated.map((process) => process.pid), [5001, 5002]);
 });
 
 test('brp_shutdown reports graceful shutdown and falls back to termination', async () => {

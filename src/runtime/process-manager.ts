@@ -143,12 +143,19 @@ export class ProcessManager implements ProcessService {
     tracked.child.kill('SIGTERM');
     if (await this.waitForExit(tracked, this.#killGraceMs)) return;
     tracked.child.kill('SIGKILL');
-    await this.waitForExit(tracked, this.#killGraceMs);
+    if (!(await this.waitForExit(tracked, this.#killGraceMs))) {
+      throw new Error(
+        `Process ${tracked.pid} did not exit within ${this.#killGraceMs}ms after SIGKILL`,
+      );
+    }
   }
 
   async shutdownAll(): Promise<void> {
-    const survivors = this.#children;
-    this.#children = [];
-    await Promise.all(survivors.map((entry) => this.terminate(entry)));
+    const children = [...this.#children];
+    await Promise.all(children.map((entry) => this.terminate(entry)));
+    // Drop the terminated set only once every termination succeeded: on a
+    // rejection the timed-out children stay tracked so a later shutdownAll
+    // retries them.
+    this.#children = this.#children.filter((entry) => !children.includes(entry));
   }
 }
