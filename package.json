@@ -1,7 +1,7 @@
 {
   "name": "@cwchanap/bevy-plugin",
   "version": "0.1.0",
-  "description": "Agent-plugin distribution wrapper for the Bevy BRP MCP and bevy-mcp bridge.",
+  "description": "Repository-owned Bevy MCP stdio server (47-tool default surface) for local Bevy apps, with the app-side bevy-mcp bridge crate.",
   "type": "module",
   "license": "MIT",
   "bin": {

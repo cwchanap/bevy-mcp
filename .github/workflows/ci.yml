@@ -123,21 +123,8 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Install upstream MCP server
-        run: cargo install bevy_brp_mcp --version 0.22.3 --locked
-
       - name: Real MCP client integration
         run: xvfb-run -a npm run test:integration
-
-      - name: Dump fixture logs on failure
-        if: failure()
-        run: |
-          ls -la /tmp/bevy_brp_mcp_*.log 2>/dev/null || echo "no bevy_brp_mcp log files in /tmp"
-          for f in /tmp/bevy_brp_mcp_*.log; do
-            [ -e "$f" ] || continue
-            echo "===== $f ====="
-            tail -n 200 "$f"
-          done
 
   publish:
     name: Publish to npm
