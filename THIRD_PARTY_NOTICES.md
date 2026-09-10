@@ -26,6 +26,13 @@ commit:
   `brp_type_guide/` modules: `response.rs`, `type_kind.rs`,
   `path_example.rs`, `variant_signature.rs`, `guide.rs`,
   `mutation_path_builder/`);
+- `src/tools/app.ts` — the app-lifecycle tool semantics: port/profile/
+  instance-count validation constants and rules, launch target search order
+  and package disambiguation, BRP plugin source detection, the predicted
+  builds display, and the launch/status/shutdown message and error shapes
+  (upstream `src/app_tools/` including `constants.rs` and `targets/`);
+- `src/tools/watches.ts` — the watch tool start/error message shapes and
+  result placements (upstream `src/brp_tools/watch_tools/`);
 - `src/runtime/watch-manager.ts` and `src/runtime/log-store.ts` — the watch
   lifecycle, log naming, and record line formats (upstream
   `src/brp_tools/watch_tools/` and `src/log_tools/`), with the retired

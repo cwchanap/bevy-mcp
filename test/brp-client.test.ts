@@ -157,6 +157,44 @@ test('call() rejects with BrpMalformedResponseError on malformed JSON', async ()
   await server.close();
 });
 
+for (const [label, body] of [
+  ['null', 'null'],
+  ['a bare string', '"hello"'],
+  ['an array', '[1]'],
+  ['an object without result/error members', '{}'],
+] as const) {
+  test(`call() rejects with a typed error when the body is ${label}`, async () => {
+    const server = await startServer((_req, res) => {
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(body);
+    });
+
+    await assert.rejects(
+      new BrpClient().call('world.get_components', {}, { port: server.port }),
+      (err: unknown) => {
+        assert.ok(err instanceof BrpMalformedResponseError);
+        assert.match(err.message, /world\.get_components/);
+        return true;
+      },
+    );
+    await server.close();
+  });
+}
+
+test('call() timeout still fires when the body stalls after the headers', async () => {
+  const server = await startServer((_req, res) => {
+    // Headers go out immediately; the body never arrives.
+    res.writeHead(200, { 'content-type': 'application/json' });
+    res.flushHeaders();
+  });
+
+  await assert.rejects(
+    new BrpClient().call('world.spawn_entity', {}, { port: server.port, timeoutMs: 100 }),
+    BrpTimeoutError,
+  );
+  await server.close();
+});
+
 test('call() rejects with BrpHttpError on HTTP >= 400 without retrying', async () => {
   const server = await startServer((_req, res) => {
     res.writeHead(500, { 'content-type': 'text/plain' });

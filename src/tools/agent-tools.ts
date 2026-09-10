@@ -2,7 +2,7 @@ import { DEFAULT_BRP_PORT } from '../brp/client.js';
 import { BrpError, BrpJsonRpcError } from '../brp/errors.js';
 import { methodNotFoundSuffix } from './brp-shape.js';
 import type { BevyMcpServices } from '../services.js';
-import { toolError, toolSuccess } from './response.js';
+import { brpErrorInfo, toolError, toolSuccess } from './response.js';
 import type { OwnedToolHandler } from './register.js';
 
 /** Method names from an OpenRPC-style `rpc.discover` document. */
@@ -54,20 +54,29 @@ export function executeHandler(services: BevyMcpServices): OwnedToolHandler {
         ...(result !== undefined && result !== null ? { result } : {}),
       });
     } catch (error) {
-      if (!(error instanceof BrpJsonRpcError)) throw error;
-      // Upstream `brp_execute` runs through `execute_raw`, so failures keep
-      // the raw BRP message (plus the extras suffix for -32601) and surface
-      // the details under `metadata` (stage: execution).
-      const message =
-        error.code === -32601 ? error.brpMessage + methodNotFoundSuffix(method) : error.brpMessage;
-      return toolError(callInfo, message, {
-        metadata: {
-          stage: 'execution',
-          method,
-          port,
-          code: error.code,
-          ...(error.data !== undefined && error.data !== null ? { data: error.data } : {}),
-        },
+      if (!(error instanceof BrpError)) throw error;
+      if (error instanceof BrpJsonRpcError) {
+        // Upstream `brp_execute` runs through `execute_raw`, so failures keep
+        // the raw BRP message (plus the extras suffix for -32601) and surface
+        // the details under `metadata` (stage: execution).
+        const message =
+          error.code === -32601 ? error.brpMessage + methodNotFoundSuffix(method) : error.brpMessage;
+        return toolError(callInfo, message, {
+          metadata: {
+            stage: 'execution',
+            method,
+            port,
+            code: error.code,
+            ...(error.data !== undefined && error.data !== null ? { data: error.data } : {}),
+          },
+        });
+      }
+      // Non-JSON-RPC transport failure (timeout, abort, HTTP, malformed
+      // body): the same standard error envelope as every other failure path,
+      // never a raw rethrow.
+      return toolError(callInfo, error.message, {
+        metadata: { stage: 'execution', method, port },
+        error_info: brpErrorInfo(error),
       });
     }
   };

@@ -62,7 +62,13 @@ function applyParameterEcho(
   }
   response['parameters'] =
     mode === 'direct' ? directEchoParameters(contract, args) : echoParameters(contract, args);
-  return { ...result, structuredContent: response };
+  // Rebuild the text content from the final structuredContent so both stay
+  // one JSON serialization of the same envelope.
+  return {
+    ...result,
+    structuredContent: response,
+    content: [{ type: 'text', text: JSON.stringify(response) }],
+  };
 }
 
 /**

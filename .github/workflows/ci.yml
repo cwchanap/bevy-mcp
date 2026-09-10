@@ -85,7 +85,11 @@ jobs:
         run: npm run build
 
       - name: Unit tests
+        # No Bevy system deps in this job: opt out of the live fixture parity
+        # gate. The integration job runs the real journeys and must not skip.
         run: npm test
+        env:
+          BEVY_MCP_SKIP_FIXTURE_TESTS: '1'
 
       - name: Smoke packed CLI
         run: npm run smoke:packed

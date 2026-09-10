@@ -1,5 +1,5 @@
-import { existsSync } from 'node:fs';
-import { appendFile, mkdir, readdir, readFile, stat, unlink, writeFile } from 'node:fs/promises';
+import { lstatSync } from 'node:fs';
+import { appendFile, lstat, mkdir, readdir, readFile, unlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -144,7 +144,11 @@ export class LogStore {
     return join(this.root, WATCHES_DIR);
   }
 
-  /** Allocate an app log file for `appName`. */
+  /**
+   * Allocate an app log file for `appName`. Exclusive-create atomic: a
+   * same-second collision retries with a bumped timestamp instead of
+   * truncating an existing file.
+   */
   async createAppLog(appName: string): Promise<{ filename: string; path: string }> {
     return this.#allocate(this.appsRoot, `${LOG_PREFIX}${sanitizeName(appName)}`);
   }
@@ -196,10 +200,12 @@ export class LogStore {
     }
     const path = this.#resolveOwned(filename);
     if (path === undefined) {
+      // Includes symlinks planted in the owned roots: they are never followed,
+      // so they are not owned files and cannot be read.
       throw new Error(`log file '${filename}' not found`);
     }
 
-    const [raw, metadata] = await Promise.all([readFile(path, 'utf8'), stat(path)]);
+    const [raw, metadata] = await Promise.all([readFile(path, 'utf8'), lstat(path)]);
     const split = raw.split('\n');
     if (split[split.length - 1] === '') split.pop();
     let lines = split.map((line) => (line.endsWith('\r') ? line.slice(0, -1) : line));
@@ -257,25 +263,36 @@ export class LogStore {
     return deleted;
   }
 
-  /** Create `prefix_{timestamp}.log`, bumping the second on any collision. */
+  /** Create `prefix_{timestamp}.log` with an exclusive ('wx') create: the
+   * exists-then-write TOCTOU is gone, and a same-second collision (two
+   * allocations within one epoch second) bumps the second and retries rather
+   * than truncating an existing file. */
   async #allocate(dir: string, prefix: string): Promise<{ filename: string; path: string }> {
     await mkdir(dir, { recursive: true });
     let timestamp = epochSeconds();
-    let filename = `${prefix}_${timestamp}${LOG_EXTENSION}`;
-    while (existsSync(join(dir, filename))) {
-      timestamp += 1;
-      filename = `${prefix}_${timestamp}${LOG_EXTENSION}`;
+    for (;;) {
+      const filename = `${prefix}_${timestamp}${LOG_EXTENSION}`;
+      const path = join(dir, filename);
+      try {
+        await writeFile(path, '', { flag: 'wx' });
+        return { filename, path };
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException)?.code !== 'EEXIST') throw error;
+        timestamp += 1;
+      }
     }
-    const path = join(dir, filename);
-    await writeFile(path, '');
-    return { filename, path };
   }
 
-  /** Resolve a validated bare filename to an owned root path, if present. */
+  /**
+   * Resolve a validated bare filename to an owned root path, if present.
+   * lstat only: a symbolic link in the owned root is not an owned file and is
+   * never followed.
+   */
   #resolveOwned(filename: string): string | undefined {
     for (const dir of [this.appsRoot, this.watchesRoot]) {
       const path = join(dir, filename);
-      if (existsSync(path)) return path;
+      const info = lstatSync(path, { throwIfNoEntry: false });
+      if (info?.isFile()) return path;
     }
     return undefined;
   }
@@ -298,7 +315,9 @@ export class LogStore {
         if (parsed === undefined) continue;
         const path = join(dir, filename);
         try {
-          const metadata = await stat(path);
+          // lstat: symlinks in the owned roots are not owned files — never
+          // listed, never read, never deleted (targets stay untouched).
+          const metadata = await lstat(path);
           if (!metadata.isFile()) continue;
           entries.push({
             filename,

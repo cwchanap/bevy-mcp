@@ -10,8 +10,14 @@ import { createOwnedServer } from '../src/server.js';
 //
 // The owned type-guide tools query the live fixture app's `registry.schema`
 // over real BRP HTTP, exactly like production. One fixture instance is shared
-// by every test in this file; tests are skipped when the fixture binary has
-// not been built (`cargo build -p bevy-mcp-fixture`).
+// by every test in this file.
+//
+// Gating: the suite is skipped ONLY when explicitly opted out via
+// BEVY_MCP_SKIP_FIXTURE_TESTS=1 (CI's `node_package` job sets it — it has no
+// Bevy system deps; the `integration` job and local dev must NOT set it).
+// Without the opt-out a missing fixture binary triggers ONE
+// `cargo build -p bevy-mcp-fixture` attempt; if cargo or the build fails the
+// suite FAILS loudly — the parity gate never silently vanishes.
 
 const REPO_ROOT = fileURLToPath(new URL('../..', import.meta.url)); // compiled to .test-build/test/
 const FIXTURE_BIN = `${REPO_ROOT}target/debug/bevy-mcp-fixture`;
@@ -19,7 +25,35 @@ const PORT = 15702;
 const READY_TIMEOUT_MS = 60_000;
 const GOLDENS_DIR = fileURLToPath(new URL('../../test/contracts/type-guides/', import.meta.url));
 
-const FIXTURE_AVAILABLE = existsSync(FIXTURE_BIN);
+const SKIP_FIXTURE_TESTS = process.env.BEVY_MCP_SKIP_FIXTURE_TESTS === '1';
+
+/** Build the fixture once per process; rejects loudly on any failure. */
+let fixtureBuild: Promise<void> | undefined;
+function ensureFixtureBinary(): Promise<void> {
+  if (existsSync(FIXTURE_BIN)) return Promise.resolve();
+  fixtureBuild ??= new Promise<void>((resolve, reject) => {
+    console.error('[type-guides-parity] fixture binary missing — running cargo build -p bevy-mcp-fixture');
+    const build = spawn('cargo', ['build', '-p', 'bevy-mcp-fixture'], {
+      cwd: REPO_ROOT,
+      stdio: 'inherit',
+    });
+    const fail = (message: string): void =>
+      reject(
+        new Error(
+          `${message} Set BEVY_MCP_SKIP_FIXTURE_TESTS=1 to opt out of the live parity gate.`,
+        ),
+      );
+    build.once('error', (error) =>
+      fail(`cargo could not be started (${error.message}); the fixture binary is not built.`),
+    );
+    build.once('exit', (code) =>
+      existsSync(FIXTURE_BIN)
+        ? resolve()
+        : fail(`'cargo build -p bevy-mcp-fixture' exited with ${code} and no fixture binary.`),
+    );
+  });
+  return fixtureBuild;
+}
 
 interface Shared {
   client: Client;
@@ -82,7 +116,10 @@ async function startFixture(): Promise<ChildProcess> {
   }
 }
 
-test('type-guide parity against the live fixture', { skip: !FIXTURE_AVAILABLE }, async (t) => {
+test('type-guide parity against the live fixture', { skip: SKIP_FIXTURE_TESTS }, async (t) => {
+  // Not opted out and no binary: build it once; a failure here FAILS the gate.
+  await ensureFixtureBinary();
+
   // Shared fixture + owned server (in-process, real MCP framing, real BRP).
   const fixture = await startFixture();
   t.after(async () => {
