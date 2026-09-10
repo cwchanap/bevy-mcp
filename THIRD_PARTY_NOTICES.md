@@ -10,26 +10,36 @@ This repository captures and redistributes portions of the upstream
 - Pinned upstream commit: `85d0ecaed0b4aaebc5ba6d2b54026489e9e5042b`
 - License: **MIT**
 
-The file `contracts/bevy-brp-mcp-0.22.3-tools.json` contains the tool metadata
-(names, titles, descriptions, annotations, input schemas, and output schemas)
-captured from the upstream `tools/list` response at the pinned version. Later
-tasks translate portions of the upstream type-guide behavior; those translated
-portions likewise derive from the upstream project.
+Portions of this repository derive from the upstream project at the pinned
+commit:
 
-These captured tool descriptions, schema metadata, and translated type-guide
-portions are used under the upstream MIT license reproduced below.
+- `contracts/bevy-brp-mcp-0.22.3-tools.json` — the tool metadata (names,
+  titles, descriptions, annotations, input schemas, and output schemas)
+  captured from the upstream `tools/list` response;
+- `src/tools/brp-shape.ts` — per-tool success `message` templates and
+  `metadata` derivations, BRP error enhancement, format-error type-guide
+  embedding, and the serde parameter echo (upstream `brp_tools/tools/*.rs`
+  and macros, `brp_client/client.rs`, `brp_client/operation.rs`);
+- `src/tools/type-guides/` — the type-guide subsystem: core data model and
+  schema/type-kind info, spawn/insert value examples, mutation paths,
+  curated Bevy type knowledge, and agent guidance (upstream
+  `brp_type_guide/` modules: `response.rs`, `type_kind.rs`,
+  `path_example.rs`, `variant_signature.rs`, `guide.rs`,
+  `mutation_path_builder/`);
+- `src/runtime/watch-manager.ts` and `src/runtime/log-store.ts` — the watch
+  lifecycle, log naming, and record line formats (upstream
+  `src/brp_tools/watch_tools/` and `src/log_tools/`), with the retired
+  upstream `bevy_brp_mcp_` log filename prefix replaced by the
+  repository-owned `bevy-mcp` prefix.
+
+These captured metadata and translated portions are used under the upstream
+MIT license, reproduced below as it appears in the upstream `mcp/LICENSE-MIT`
+at the pinned commit.
 
 ## MIT License
 
-The upstream project's `mcp/LICENSE-MIT` was not available in the environment
-where this notice was written; the canonical MIT license text is reproduced
-below. Copyright belongs to the upstream authors as stated in the upstream
-`LICENSE-MIT` in `natepiano/bevy_brp`.
-
 ```text
 MIT License
-
-Copyright (c) <year> <copyright holders>
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
