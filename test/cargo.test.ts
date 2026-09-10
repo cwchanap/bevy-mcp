@@ -187,11 +187,16 @@ test('package id name extraction', () => {
   assert.equal(packageNameFromPackageId('registry+https://github.com/rust-lang/crates.io-index#serde@1.0.0'), 'serde');
 });
 
-// ===== Real workspace smoke (gated on cargo being available) =====
+// ===== Real workspace smoke (gated on being able to build the fixture) =====
 
 const REPO_ROOT = fileURLToPath(new URL('../..', import.meta.url)); // compiled to .test-build/test/
 
-function cargoMissingReason(): string | false {
+// Building the fixture needs cargo AND the Bevy system deps (wayland, alsa,
+// udev…). Environments without them (CI's `node_package` job) opt out via
+// BEVY_MCP_SKIP_FIXTURE_TESTS=1 — same contract as type-guides-parity.test.ts.
+// The integration job exercises this code path for real through brp_launch.
+function smokeSkipReason(): string | false {
+  if (process.env.BEVY_MCP_SKIP_FIXTURE_TESTS === '1') return 'fixture build opted out (BEVY_MCP_SKIP_FIXTURE_TESTS=1)';
   try {
     const result = spawnSync('cargo', ['--version'], { stdio: 'ignore' });
     return result.error ? 'cargo not available' : false;
@@ -200,7 +205,7 @@ function cargoMissingReason(): string | false {
   }
 }
 
-test('real workspace: discovery finds bevy-mcp-fixture and debug build resolves it', { skip: cargoMissingReason() }, async () => {
+test('real workspace: discovery finds bevy-mcp-fixture and debug build resolves it', { skip: smokeSkipReason() }, async () => {
   const cargo = new CargoRuntime();
   const targets = await cargo.listTargets(REPO_ROOT);
   const fixture = targets.find((t) => t.name === 'bevy-mcp-fixture');
