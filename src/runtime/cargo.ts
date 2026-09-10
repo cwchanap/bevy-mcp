@@ -23,10 +23,12 @@ export interface BevyTarget {
   packageName: string;
   manifestPath: string;
   packageRoot: string;
+  /** Cargo workspace root containing the target (upstream launch metadata). */
+  workspaceRoot: string;
 }
 
 /** Async seam over process execution so tests fake cargo without shelling
- * out (same pattern as the launcher's `SpawnImpl`). */
+ * out (async process execution stays injectable). */
 export type CargoRunner = (
   file: string,
   args: readonly string[],
@@ -48,6 +50,11 @@ interface CargoMetadataPackage {
   targets: { name: string; kind: string[] }[];
 }
 
+interface CargoMetadata {
+  workspace_root?: string;
+  packages?: CargoMetadataPackage[];
+}
+
 interface CargoArtifactMessage {
   reason?: string;
   package_id?: string;
@@ -67,7 +74,8 @@ function resolveManifestDir(root: string): string {
  * then package, then kind. With `--no-deps` the package list is already
  * scoped to workspace members. */
 export function normalizeCargoMetadata(stdout: string): BevyTarget[] {
-  const metadata = JSON.parse(stdout) as { packages?: CargoMetadataPackage[] };
+  const metadata = JSON.parse(stdout) as CargoMetadata;
+  const workspaceRoot = metadata.workspace_root ?? '';
   const targets: BevyTarget[] = [];
   for (const pkg of metadata.packages ?? []) {
     for (const target of pkg.targets) {
@@ -84,6 +92,7 @@ export function normalizeCargoMetadata(stdout: string): BevyTarget[] {
         packageName: pkg.name,
         manifestPath,
         packageRoot: dirname(manifestPath),
+        workspaceRoot,
       });
     }
   }

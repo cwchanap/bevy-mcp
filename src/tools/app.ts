@@ -1,6 +1,6 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { readdir } from 'node:fs/promises';
-import { join, relative, resolve } from 'node:path';
+import { basename, join, relative, resolve } from 'node:path';
 import { DEFAULT_BRP_PORT } from '../brp/client.js';
 import { BrpError } from '../brp/errors.js';
 import type { BevyTarget } from '../runtime/cargo.js';
@@ -110,6 +110,23 @@ async function brpLevelFor(target: BevyTarget): Promise<BrpLevel> {
   return fileBrpLevel(sourceFileFor(target));
 }
 
+/**
+ * Upstream reports each target's predicted cargo artifact paths and whether
+ * they exist (display data only — launches always build through Cargo
+ * incremental compilation and resolve the executable from compiler
+ * artifacts). Ported from upstream `create_builds_json` (MIT).
+ */
+function buildsFor(target: BevyTarget): Record<string, { path: string; built: boolean }> {
+  const predicted = (profile: string): string =>
+    target.kind === 'example'
+      ? join(target.workspaceRoot, 'target', profile, 'examples', target.name)
+      : join(target.workspaceRoot, 'target', profile, target.name);
+  return {
+    debug: { path: predicted('debug'), built: existsSync(predicted('debug')) },
+    release: { path: predicted('release'), built: existsSync(predicted('release')) },
+  };
+}
+
 /** `brp_list_bevy {path?}`: cargo metadata targets with kind + brp_level. */
 export function listBevyHandler(services: BevyMcpServices): OwnedToolHandler {
   return async (args) => {
@@ -124,8 +141,10 @@ export function listBevyHandler(services: BevyMcpServices): OwnedToolHandler {
           kind: target.kind,
           package_name: target.packageName,
           brp_level: await brpLevelFor(target),
+          workspace_root: target.workspaceRoot,
           manifest_path: target.manifestPath,
           relative_path: relative(base, target.packageRoot),
+          builds: buildsFor(target),
         })),
       );
       return toolSuccess(callInfo, `Found ${items.length} Bevy targets`, {
@@ -307,7 +326,9 @@ export function launchHandler(services: BevyMcpServices): OwnedToolHandler {
 
       // ONE cargo build per selected target/profile; the executable comes
       // from the compiler artifact, never a predicted path, never cargo run.
+      const buildStarted = Date.now();
       const { executable } = await services.cargo.build(target, plan.profile);
+      const launchDurationMs = Date.now() - buildStarted;
 
       const instances: { pid: number; log_file: string; port: number }[] = [];
       for (const port of plan.ports) {
@@ -339,10 +360,13 @@ export function launchHandler(services: BevyMcpServices): OwnedToolHandler {
             ...(kind === 'app'
               ? { binary_path: executable }
               : { package_name: target.packageName }),
-            launched_as: kind,
+            launch_duration_ms: launchDurationMs,
             launch_timestamp: new Date().toISOString(),
+            workspace: basename(target.workspaceRoot),
+            launched_as: kind,
           },
-          result: { instances },
+          // Upstream `#[to_result]` places the bare instance array.
+          result: instances,
           parameters: args,
         },
       );
@@ -409,7 +433,7 @@ export function statusHandler(services: BevyMcpServices): OwnedToolHandler {
  * then terminate a tracked child still alive after the bounded interval. */
 export function shutdownHandler(services: BevyMcpServices): OwnedToolHandler {
   return async (args) => {
-    const callInfo = { mcp_tool: 'brp_shutdown' } as const;
+    const callInfo = { mcp_tool: 'brp_shutdown', brp_method: 'brp_extras/shutdown' } as const;
     const appName = typeof args.app_name === 'string' ? args.app_name : undefined;
     if (appName === undefined) {
       return toolError(callInfo, 'app_name is required', { parameters: args });
@@ -438,33 +462,35 @@ export function shutdownHandler(services: BevyMcpServices): OwnedToolHandler {
       });
     }
 
-    let method: 'shutdown' | 'terminate';
+    let method: 'clean_shutdown' | 'process_kill';
     if (tracked === undefined) {
       // No tracked child: the graceful call answered for a foreign process.
-      method = 'shutdown';
+      method = 'clean_shutdown';
     } else if (
       brpShutdown && (await services.processes.waitForExit(tracked, SHUTDOWN_GRACE_MS))
     ) {
-      method = 'shutdown';
+      method = 'clean_shutdown';
     } else {
       // BRP unreachable, or the child survived the bounded graceful window.
       await services.processes.terminate(tracked);
-      method = 'terminate';
+      method = 'process_kill';
     }
 
     const pid = tracked?.pid ?? responsePid ?? 0;
     return toolSuccess(
       callInfo,
-      method === 'shutdown'
+      method === 'clean_shutdown'
         ? `Successfully initiated graceful shutdown for '${appName}' (PID: ${pid}) via bevy_brp_extras`
-        : `Terminated process '${appName}' (PID: ${pid})`,
+        : `Terminated process '${appName}' (PID: ${pid}) using kill`,
       {
         metadata: {
           app_name: appName,
           pid,
-          method,
+          // Upstream serializes the method field through its
+          // `#[serde(rename = "shutdown_method")]` attribute.
+          shutdown_method: method,
           port,
-          ...(method === 'terminate'
+          ...(method === 'process_kill'
             ? { warning: 'Consider adding bevy_brp_extras for clean shutdown' }
             : {}),
         },

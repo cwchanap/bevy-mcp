@@ -3,54 +3,54 @@
 //
 // 1. `npm pack` the repo into a temp dir.
 // 2. Install the tarball into that temp dir.
-// 3. Run the installed `bevy-plugin` bin with BEVY_BRP_MCP_BIN pointed at a
-//    fake executable that speaks no MCP but records argv + stdio lifecycle.
-// 4. Assert the packed bin delegated to the fake and mirrored its exit code.
-// 5. Clean up the temp dir.
+// 3. Connect to the installed `bevy-plugin` bin over StdioClientTransport.
+// 4. Assert the packed owned server advertises all 47 tools matching the
+//    captured contract (after the reviewed description overrides).
+// 5. Close the client and verify the server process exits.
+// 6. Clean up the temp dir.
 
 import assert from 'node:assert/strict';
-import { execFile, spawn } from 'node:child_process';
-import { chmod, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { execFile } from 'node:child_process';
+import { readFileSync } from 'node:fs';
+import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { Client } from '@modelcontextprotocol/client';
+import { StdioClientTransport } from '@modelcontextprotocol/client/stdio';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const NPM_TIMEOUT = 120_000;
-const BIN_TIMEOUT = 30_000;
-const FAKE_EXIT_CODE = 7;
+const TOOL_TIMEOUT = 30_000;
+const EXIT_TIMEOUT = 15_000;
 
 function log(message) {
   console.log(`[smoke:packed] ${message}`);
 }
 
-function run(cmd, args, { cwd, timeout, env } = {}) {
+function run(cmd, args, { cwd, timeout } = {}) {
   return new Promise((resolve, reject) => {
     execFile(
       cmd,
       args,
-      { cwd, timeout, env: env ?? process.env, encoding: 'utf8' },
+      { cwd, timeout, env: process.env, encoding: 'utf8' },
       (err, stdout) => (err ? reject(err) : resolve(stdout)),
     );
   });
 }
 
-// Fake upstream: records argv and stdin EOF, then exits with BEVY_FAKE_EXIT.
-// It deliberately speaks no MCP — the wrapper is a thin exec passthrough.
-const FAKE_BIN = `#!/bin/sh
-{
-  printf 'argv'
-  for arg in "$@"; do printf ' %s' "\$arg"; done
-  printf '\\n'
-  cat > /dev/null
-  printf 'stdin-eof\\n'
-} >> "\$BEVY_FAKE_LOG"
-exit "\$BEVY_FAKE_EXIT"
-`;
+function processAlive(pid) {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 async function main() {
   const tmpDir = await mkdtemp(path.join(tmpdir(), 'bevy-plugin-smoke-'));
-  let tarball;
+  let serverPid;
   try {
     log('npm pack into temp dir');
     const packJson = await run(
@@ -59,7 +59,7 @@ async function main() {
       { cwd: repoRoot, timeout: NPM_TIMEOUT },
     );
     const packed = JSON.parse(packJson)[0];
-    tarball = path.join(tmpDir, packed.filename);
+    const tarball = path.join(tmpDir, packed.filename);
     log(`packed ${packed.name}@${packed.version} -> ${packed.filename}`);
 
     log('installing tarball into temp dir');
@@ -68,46 +68,48 @@ async function main() {
       timeout: NPM_TIMEOUT,
     });
 
-    const fakeBin = path.join(tmpDir, 'fake-bevy-brp-mcp.sh');
-    const fakeLog = path.join(tmpDir, 'fake.log');
-    await writeFile(fakeBin, FAKE_BIN);
-    await chmod(fakeBin, 0o755);
-
-    log('running packed bevy-plugin bin against fake BEVY_BRP_MCP_BIN');
     const binPath = path.join(tmpDir, 'node_modules', '.bin', 'bevy-plugin');
-    const code = await new Promise((resolve, reject) => {
-      const child = spawn(binPath, ['--smoke-arg', 'one'], {
-        cwd: tmpDir,
-        env: {
-          ...process.env,
-          BEVY_BRP_MCP_BIN: fakeBin,
-          BEVY_FAKE_LOG: fakeLog,
-          BEVY_FAKE_EXIT: String(FAKE_EXIT_CODE),
-        },
-        stdio: ['pipe', 'ignore', 'inherit'],
-      });
-      child.stdin.end();
-      const timer = setTimeout(() => {
-        child.kill('SIGKILL');
-        reject(new Error(`packed bin timed out after ${BIN_TIMEOUT}ms`));
-      }, BIN_TIMEOUT);
-      child.on('error', (err) => {
-        clearTimeout(timer);
-        reject(err);
-      });
-      child.on('close', (c) => {
-        clearTimeout(timer);
-        resolve(c);
-      });
+    log('connecting to the packed bevy-plugin bin over stdio MCP');
+    const client = new Client({ name: 'bevy-plugin-smoke', version: '1.0.0' });
+    const transport = new StdioClientTransport({
+      command: binPath,
+      cwd: tmpDir,
+      stderr: 'inherit',
+      env: { ...process.env },
     });
+    await client.connect(transport);
+    serverPid = transport.pid;
+    log(`connected (server pid ${serverPid})`);
 
-    log(`packed bin exited with code ${code}`);
-    assert.equal(code, FAKE_EXIT_CODE, 'bin must mirror the fake binary exit code');
+    const { tools } = await client.listTools();
+    const contract = JSON.parse(
+      readFileSync(path.join(repoRoot, 'contracts', 'bevy-brp-mcp-0.22.3-tools.json'), 'utf8'),
+    ).tools;
+    assert.equal(tools.length, contract.length, `expected ${contract.length} tools from the packed bin`);
+    const byName = Object.fromEntries(tools.map((t) => [t.name, t]));
+    for (const captured of contract) {
+      const advertised = byName[captured.name];
+      assert.ok(advertised, `tool ${captured.name} missing from the packed bin`);
+      assert.equal(advertised.title, captured.title, `${captured.name}: title`);
+      assert.equal(
+        advertised.description,
+        captured.description.replaceAll('bevy_brp_mcp', 'bevy-mcp'),
+        `${captured.name}: description`,
+      );
+      assert.deepEqual(advertised.annotations, captured.annotations, `${captured.name}: annotations`);
+      assert.deepEqual(advertised.inputSchema, captured.inputSchema, `${captured.name}: inputSchema`);
+      assert.deepEqual(advertised.outputSchema, captured.outputSchema, `${captured.name}: outputSchema`);
+    }
+    log(`all ${contract.length} tools verified against the captured contract`);
 
-    const recorded = await readFile(fakeLog, 'utf8');
-    assert.match(recorded, /^argv --smoke-arg one$/m, 'fake must receive the CLI argv');
-    assert.match(recorded, /^stdin-eof$/m, 'fake must see stdin EOF (stdio wired through)');
-    log('delegation + exit-code mirror verified');
+    await client.close();
+    log('client closed; waiting for the packed server to exit');
+    const deadline = Date.now() + EXIT_TIMEOUT;
+    while (processAlive(serverPid) && Date.now() < deadline) {
+      await new Promise((resolve) => setTimeout(resolve, 250));
+    }
+    assert.ok(!processAlive(serverPid), `packed server ${serverPid} must exit after close`);
+    log(`packed server ${serverPid} exited cleanly`);
   } finally {
     await rm(tmpDir, { recursive: true, force: true });
   }

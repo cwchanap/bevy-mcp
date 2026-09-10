@@ -46,6 +46,7 @@ const expectedTarget = (
   kind,
   packageName,
   manifestPath,
+  workspaceRoot: '',
   packageRoot: manifestPath.slice(0, manifestPath.lastIndexOf('/')),
 });
 

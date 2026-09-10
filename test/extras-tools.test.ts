@@ -163,11 +163,11 @@ test('every direct extras tool defaults the port to DEFAULT_BRP_PORT when absent
   }
 });
 
-test('every direct extras tool converts BRP errors into an error envelope with error_info', async () => {
+test('every direct extras tool converts BRP errors into plain upstream error envelopes', async () => {
   const catalog = loadToolContractCatalog();
   for (const [name, method] of Object.entries(EXTRAS_DIRECT)) {
     const fake = new FakeBrpClient();
-    fake.errors.set(method, new BrpJsonRpcError(method, -32602, 'invalid params'));
+    fake.errors.set(method, new BrpJsonRpcError(method, -23403, 'invalid params'));
     const server = new McpServer({ name: 't', version: '0.0.0' });
     registerExtrasTools(server, fakeServices(fake), catalog);
     const result = await registeredHandler(server, name)({});
@@ -176,10 +176,9 @@ test('every direct extras tool converts BRP errors into an error envelope with e
     assert.equal(env.status, 'error', `${name}: error status`);
     assert.equal(result.isError, true, `${name}: isError set`);
     assert.deepEqual(env.call_info, { mcp_tool: name, brp_method: method }, `${name}: call_info`);
-    assert.deepEqual(env.error_info, {
-      code: -32602,
-      message: fake.errors.get(method)!.message,
-    });
+    // Upstream plain path: raw message + code suffix, no other fields.
+    assert.equal(env.message, 'invalid params (error -23403)', `${name}: enhanced message`);
+    assert.equal('error_info' in env, false, `${name}: no error_info`);
     assert.equal('result' in env, false, `${name}: no result on error`);
   }
 });
@@ -195,7 +194,11 @@ test('full-window mode forwards only path on the default port', async () => {
   ]);
   const env = envelope(result);
   assert.equal(env.status, 'success');
-  assert.deepEqual(env.call_info, { mcp_tool: 'brp_extras_screenshot' });
+  // Upstream registers the composite as a BRP tool for the screenshot method.
+  assert.deepEqual(env.call_info, {
+    mcp_tool: 'brp_extras_screenshot',
+    brp_method: 'brp_extras/screenshot',
+  });
   assert.notEqual(result.isError, true);
 });
 
@@ -258,7 +261,11 @@ test('exact-name mode resolves one unique match and sends only the resolved enti
   assert.equal(fake.calls[1]!.port, 7777);
   const env = envelope(result);
   assert.equal(env.status, 'success');
-  assert.deepEqual(env.call_info, { mcp_tool: 'brp_extras_screenshot' });
+  // Upstream registers the composite as a BRP tool for the screenshot method.
+  assert.deepEqual(env.call_info, {
+    mcp_tool: 'brp_extras_screenshot',
+    brp_method: 'brp_extras/screenshot',
+  });
 });
 
 test('entity and name together are rejected without any BRP call', async () => {
@@ -343,7 +350,7 @@ test('name-mode lookup failures surface as an Internal error envelope', async ()
   assert.equal('result' in env, false);
 });
 
-test('screenshot BRP failures produce an error envelope with error_info', async () => {
+test('screenshot BRP failures produce a plain upstream error envelope', async () => {
   const { fake, call } = setup();
   fake.errors.set('brp_extras/screenshot', new BrpJsonRpcError('brp_extras/screenshot', -1, 'no camera'));
   const result = await call('brp_extras_screenshot', { entity: 4294967298, path: '/tmp/x.png' });
@@ -351,9 +358,6 @@ test('screenshot BRP failures produce an error envelope with error_info', async 
   const env = envelope(result);
   assert.equal(env.status, 'error');
   assert.equal(result.isError, true);
-  assert.match(env.message, /no camera/);
-  assert.deepEqual(env.error_info, {
-    code: -1,
-    message: fake.errors.get('brp_extras/screenshot')!.message,
-  });
+  assert.equal(env.message, 'no camera (error -1)');
+  assert.equal('error_info' in env, false);
 });

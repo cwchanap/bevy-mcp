@@ -186,17 +186,16 @@ test('brp_list_active_watches reports the upstream-compatible watch shape', asyn
   assert.equal(env.message, 'Found 1 active watches');
   assert.deepEqual(env.call_info, { mcp_tool: 'brp_list_active_watches' });
   assert.deepEqual(env.metadata, { watch_count: 1 });
-  const resultValue = env.result as {
-    watches: {
-      watch_id: number;
-      entity_id: number;
-      watch_type: string;
-      log_path: string;
-      port: number;
-    }[];
-  };
-  assert.equal(resultValue.watches.length, 1);
-  const watch = resultValue.watches[0]!;
+  // Upstream `#[to_result]` places the bare watch array in `result`.
+  const watches = env.result as {
+    watch_id: number;
+    entity_id: number;
+    watch_type: string;
+    log_path: string;
+    port: number;
+  }[];
+  assert.equal(watches.length, 1);
+  const watch = watches[0]!;
   assert.equal(watch.watch_id, 1);
   assert.equal(watch.entity_id, 9);
   assert.equal(watch.watch_type, 'list');
@@ -221,7 +220,12 @@ test('brp_stop_watch stops and reports; unknown ids are tool errors', async () =
   const unknownEnv = envelope(unknown);
   assert.equal(unknownEnv.status, 'error');
   assert.equal(unknown.isError, true);
-  assert.equal(unknownEnv.message, 'Failed to stop watch 99: watch not found');
+  // Upstream wraps the manager failure through its error stack, repeating the
+  // text (verified against the 0.22.3 oracle).
+  assert.equal(
+    unknownEnv.message,
+    'Failed to stop watch 99: Watch operation failed: Failed to stop watch 99: watch not found',
+  );
 
   // The stopped watch's log file remains for analysis.
   const logs = await logStore.list();

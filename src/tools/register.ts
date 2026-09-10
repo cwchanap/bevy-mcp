@@ -7,7 +7,8 @@ import { DEFAULT_BRP_PORT } from '../brp/client.js';
 import { BrpError } from '../brp/errors.js';
 import { overrideDescription, type ToolContractCatalog } from '../tool-contracts.js';
 import type { BevyMcpServices } from '../services.js';
-import { toolError, toolSuccess, brpErrorInfo, type CallInfo } from './response.js';
+import { toolError, toolSuccess, type CallInfo } from './response.js';
+import { directBrpErrorExtras, directEchoParameters, directShape, echoParameters } from './brp-shape.js';
 import { RESOURCE_DIRECT } from './resources.js';
 import { WORLD_DIRECT } from './world.js';
 import { findEntitiesByNameHandler } from './discovery.js';
@@ -36,6 +37,35 @@ import {
 export type OwnedToolHandler = (args: Record<string, unknown>) => Promise<CallToolResult>;
 
 /**
+ * How the handler's `parameters` echo is derived (upstream semantics):
+ * - `default`: serde echo with materialized defaults plus
+ *   `optional_parameters_not_provided`; success envelopes always echo, error
+ *   envelopes only when the handler attached `parameters`.
+ * - `direct`: the macro-generated BRP-tool family — silently drops absent
+ *   optionals, never emits the omitted list (see directEchoParameters).
+ * - `none`: bespoke `handle_impl` tools whose ToolResult keeps `params: None`
+ *   — no echo at all.
+ */
+type EchoMode = 'default' | 'direct' | 'none';
+
+function applyParameterEcho(
+  result: CallToolResult,
+  contract: ReturnType<ToolContractCatalog['get']>,
+  args: Record<string, unknown>,
+  mode: EchoMode,
+): CallToolResult {
+  if (mode === 'none') return result;
+  const response = result.structuredContent as Record<string, unknown> | undefined;
+  if (!response || !('status' in response)) return result;
+  if (response['status'] !== 'success') {
+    if (mode === 'direct' || response['parameters'] === undefined) return result;
+  }
+  response['parameters'] =
+    mode === 'direct' ? directEchoParameters(contract, args) : echoParameters(contract, args);
+  return { ...result, structuredContent: response };
+}
+
+/**
  * Register one owned tool using the captured 0.22.3 contract: captured
  * title/description/annotations and the raw captured input/output schemas are
  * passed through the SDK's official JSON-Schema adapter. `name` must exist in
@@ -46,6 +76,7 @@ export function registerOwnedTool(
   catalog: ToolContractCatalog,
   name: string,
   handler: OwnedToolHandler,
+  echoMode: EchoMode = 'default',
 ): void {
   const contract = catalog.get(name);
   server.registerTool(
@@ -57,7 +88,13 @@ export function registerOwnedTool(
       inputSchema: fromJsonSchema(contract.inputSchema),
       outputSchema: fromJsonSchema(contract.outputSchema),
     },
-    (args) => handler(args as Record<string, unknown>),
+    async (args) =>
+      applyParameterEcho(
+        await handler(args as Record<string, unknown>),
+        contract,
+        args as Record<string, unknown>,
+        echoMode,
+      ),
   );
 }
 
@@ -73,31 +110,43 @@ export function registerDirectBrpTool(
   catalog: ToolContractCatalog,
   definition: { name: string; method: string },
 ): void {
-  registerOwnedTool(server, catalog, definition.name, async (args) => {
-    const { port: portArg, ...params } = args;
-    const port = typeof portArg === 'number' ? portArg : DEFAULT_BRP_PORT;
-    const callInfo: CallInfo = { mcp_tool: definition.name, brp_method: definition.method };
-    // Port is materialized like upstream's serde default, so responses always
-    // carry the effective routing port; toolSuccess strips null optionals.
-    const parameters = { ...args, port };
-    try {
-      const result = await services.brp.call(
-        definition.method,
-        Object.keys(params).length > 0 ? params : undefined,
-        { port },
-      );
-      return toolSuccess(callInfo, `BRP call '${definition.method}' succeeded`, {
-        parameters,
-        result,
-      });
-    } catch (error) {
-      if (!(error instanceof BrpError)) throw error;
-      return toolError(callInfo, error.message, {
-        parameters,
-        error_info: brpErrorInfo(error),
-      });
-    }
-  });
+  registerOwnedTool(
+    server,
+    catalog,
+    definition.name,
+    async (args) => {
+      const { port: portArg, ...params } = args;
+      const port = typeof portArg === 'number' ? portArg : DEFAULT_BRP_PORT;
+      const callInfo: CallInfo = { mcp_tool: definition.name, brp_method: definition.method };
+      try {
+        const result = await services.brp.call(
+          definition.method,
+          Object.keys(params).length > 0 ? params : undefined,
+          { port },
+        );
+        // Raw BRP result passthrough (upstream skip_if_none); upstream derives
+        // the message template and count metadata per tool.
+        const shape = directShape(definition.name)(result, args);
+        return toolSuccess(callInfo, shape.message, {
+          ...(shape.metadata !== undefined ? { metadata: shape.metadata } : {}),
+          ...(result !== undefined && result !== null ? { result } : {}),
+        });
+      } catch (error) {
+        if (!(error instanceof BrpError)) throw error;
+        const shaped = await directBrpErrorExtras(
+          services,
+          definition.name,
+          definition.method,
+          args,
+          error,
+        );
+        return toolError(callInfo, shaped.message, {
+          ...(shaped.metadata !== undefined ? { metadata: shaped.metadata } : {}),
+        });
+      }
+    },
+    'direct',
+  );
 }
 
 /**
@@ -136,9 +185,9 @@ export function registerDiscoveryTools(
   services: BevyMcpServices,
   catalog: ToolContractCatalog,
 ): void {
-  registerOwnedTool(server, catalog, 'world_find_entities_by_name', findEntitiesByNameHandler(services));
-  registerOwnedTool(server, catalog, 'brp_execute', executeHandler(services));
-  registerOwnedTool(server, catalog, 'brp_list_agent_tools', listAgentToolsHandler(services));
+  registerOwnedTool(server, catalog, 'world_find_entities_by_name', findEntitiesByNameHandler(services), 'none');
+  registerOwnedTool(server, catalog, 'brp_execute', executeHandler(services), 'none');
+  registerOwnedTool(server, catalog, 'brp_list_agent_tools', listAgentToolsHandler(services), 'none');
 }
 
 /**

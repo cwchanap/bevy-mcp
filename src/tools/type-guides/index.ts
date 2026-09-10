@@ -143,6 +143,20 @@ function brpFailure(
   });
 }
 
+/**
+ * Generate the guide response for `types` against one fresh registry fetch.
+ * Shared with the direct-tool format-error embedding (upstream
+ * `generate_type_guide_response`).
+ */
+export async function generateTypeGuideResponseFor(
+  services: BevyMcpServices,
+  port: number,
+  types: readonly string[],
+): Promise<TypeGuideResponse> {
+  const registry = await fetchRegistry(services, port);
+  return generateTypeGuideResponse(registry, types);
+}
+
 /** `brp_type_guide`: resolve the requested types against one registry fetch. */
 export function typeGuideHandler(services: BevyMcpServices): OwnedToolHandler {
   return async (args) => {

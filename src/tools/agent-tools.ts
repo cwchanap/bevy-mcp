@@ -1,7 +1,8 @@
 import { DEFAULT_BRP_PORT } from '../brp/client.js';
 import { BrpError, BrpJsonRpcError } from '../brp/errors.js';
+import { methodNotFoundSuffix } from './brp-shape.js';
 import type { BevyMcpServices } from '../services.js';
-import { brpErrorInfo, toolError, toolSuccess } from './response.js';
+import { toolError, toolSuccess } from './response.js';
 import type { OwnedToolHandler } from './register.js';
 
 /** Method names from an OpenRPC-style `rpc.discover` document. */
@@ -35,7 +36,8 @@ export function executeHandler(services: BevyMcpServices): OwnedToolHandler {
     }
 
     if (!available.includes(method)) {
-      return toolError(callInfo, `BRP method \`${method}\` is not registered on port ${port}`, {
+      const message = `BRP method \`${method}\` is not registered on port ${port}`;
+      return toolError(callInfo, message + methodNotFoundSuffix(method), {
         metadata: {
           stage: 'discovery',
           method,
@@ -48,10 +50,25 @@ export function executeHandler(services: BevyMcpServices): OwnedToolHandler {
     try {
       const params = 'params' in args ? args.params : undefined;
       const result = await services.brp.call(method, params, { port });
-      return toolSuccess(callInfo, `Executed method ${method}`, { result });
+      return toolSuccess(callInfo, `Executed method ${method}`, {
+        ...(result !== undefined && result !== null ? { result } : {}),
+      });
     } catch (error) {
-      if (!(error instanceof BrpError)) throw error;
-      return toolError(callInfo, error.message, { error_info: brpErrorInfo(error) });
+      if (!(error instanceof BrpJsonRpcError)) throw error;
+      // Upstream `brp_execute` runs through `execute_raw`, so failures keep
+      // the raw BRP message (plus the extras suffix for -32601) and surface
+      // the details under `metadata` (stage: execution).
+      const message =
+        error.code === -32601 ? error.brpMessage + methodNotFoundSuffix(method) : error.brpMessage;
+      return toolError(callInfo, message, {
+        metadata: {
+          stage: 'execution',
+          method,
+          port,
+          code: error.code,
+          ...(error.data !== undefined && error.data !== null ? { data: error.data } : {}),
+        },
+      });
     }
   };
 }
@@ -71,11 +88,16 @@ export function listAgentToolsHandler(services: BevyMcpServices): OwnedToolHandl
 
     try {
       const fetched = await services.brp.call('brp_extras/agent_tools', undefined, { port });
-      const result: Record<string, unknown> = {
-        usage: AGENT_TOOLS_USAGE,
-        ...(typeof fetched === 'object' && fetched !== null ? fetched : {}),
-      };
-      const count = Array.isArray(result.tools) ? result.tools.length : 0;
+      // Upstream decodes the catalog wire shape and re-publishes exactly
+      // `{usage, tools}` — the wire `version` envelope is not part of the
+      // public result.
+      const fetchedRecord: Record<string, unknown> =
+        typeof fetched === 'object' && fetched !== null
+          ? (fetched as Record<string, unknown>)
+          : {};
+      const tools = Array.isArray(fetchedRecord['tools']) ? fetchedRecord['tools'] : [];
+      const result = { usage: AGENT_TOOLS_USAGE, tools };
+      const count = tools.length;
       return toolSuccess(callInfo, `Listed ${count} agent tools`, {
         metadata: { tool_count: count },
         result,
