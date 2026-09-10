@@ -26,9 +26,11 @@ export function listLogsHandler(services: BevyMcpServices): OwnedToolHandler {
         appName: strOrUndefined(args.app_name),
         verbose: args.verbose === true,
       });
+      // Upstream `#[to_result]` places the bare array in `result`, and its
+      // metadata carries the log directory.
       return toolSuccess(callInfo, `Found ${logs.length} log files`, {
-        metadata: { log_count: logs.length },
-        result: { logs },
+        metadata: { temp_directory: services.logStore.directory, log_count: logs.length },
+        result: logs,
         parameters: args,
       });
     } catch (error) {

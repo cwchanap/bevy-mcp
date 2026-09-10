@@ -17,7 +17,7 @@ import { WORLD_DIRECT } from '../src/tools/world.js';
 
 const DIRECT_TOOLS: Record<string, string> = { ...WORLD_DIRECT, ...RESOURCE_DIRECT };
 
-/** Records every call; answers from `response` or throws `error`. */
+/** Records every call; answers from `response` or throws `error` once. */
 class FakeBrpClient {
   calls: { method: string; params: unknown; port?: number }[] = [];
   response: unknown = { fake: 'result' };
@@ -25,7 +25,11 @@ class FakeBrpClient {
 
   async call(method: string, params?: unknown, options: BrpCallOptions = {}): Promise<unknown> {
     this.calls.push({ method, params, port: options.port });
-    if (this.error) throw this.error;
+    if (this.error) {
+      const error = this.error;
+      this.error = null; // one-shot: guide-fetch fallbacks hit `response`
+      throw error;
+    }
     return this.response;
   }
 }
@@ -135,7 +139,18 @@ test('every direct tool calls its fixed method with explicit port and correct en
     assert.equal(env.status, 'success', `${name}: success status`);
     assert.deepEqual(env.call_info, { mcp_tool: name, brp_method: method }, `${name}: call_info`);
     assert.deepEqual(env.result, fake.response, `${name}: BRP result placement`);
-    assert.deepEqual(env.parameters, args, `${name}: parameters echo`);
+    // The direct-family echo passes through provided fields plus the
+    // materialized port (world_mutate_components without `path` loses the
+    // echo entirely, matching the oracle).
+    if (name === 'world_mutate_components') {
+      assert.equal(env.parameters, undefined, `${name}: no echo without path`);
+    } else {
+      const parameters = env.parameters as Record<string, unknown>;
+      for (const [key, value] of Object.entries(args)) {
+        assert.deepEqual(parameters[key], value, `${name}: echo ${key}`);
+      }
+      assert.equal(parameters.port, 7777, `${name}: port echoed`);
+    }
     assert.notEqual(result.isError, true, `${name}: no isError`);
   }
 });
@@ -152,13 +167,15 @@ test('every direct tool defaults the port to DEFAULT_BRP_PORT when absent', asyn
   }
 });
 
-test('every direct tool normalizes null optionals in response parameters', async () => {
+test('every direct tool echoes provided params and drops absent optionals silently', async () => {
   const catalog = loadToolContractCatalog();
   for (const [name] of Object.entries(DIRECT_TOOLS)) {
     const fake = new FakeBrpClient();
     const server = new McpServer({ name: 't', version: '0.0.0' });
     registerDirectTools(server, fakeServices(fake), catalog);
-    const omitted = optionalKeys(catalog, name);
+    const omitted = optionalKeys(catalog, name).filter(
+      (key) => !(name === 'world_mutate_components' && key === 'path'),
+    );
     assert.ok(omitted.length > 0, `${name}: has at least one optional (port)`);
     const args: Record<string, unknown> = {
       ...requiredArgs(catalog, name),
@@ -166,16 +183,24 @@ test('every direct tool normalizes null optionals in response parameters', async
     };
     const result = await registeredHandler(server, name)(args);
 
-    // Null port routes to the default port and is materialized in parameters
-    // (like upstream's serde default), so it is not reported as not-provided.
+    // Null port routes to the default port; the direct-family echo passes
+    // through provided (non-null) fields, materializes the port, and drops
+    // absent/null optionals silently — NO omitted list (oracle parity).
     assert.equal(fake.calls[0]!.port, DEFAULT_BRP_PORT, `${name}: null port -> default`);
-    const notProvided = omitted.filter((key) => key !== 'port');
-    const expectedParameters: Record<string, unknown> = {
-      ...requiredArgs(catalog, name),
-      port: DEFAULT_BRP_PORT,
-    };
-    if (notProvided.length > 0) expectedParameters.optional_parameters_not_provided = notProvided;
-    assert.deepEqual(envelope(result).parameters, expectedParameters, `${name}: normalized parameters`);
+    const expectedParameters: Record<string, unknown> = { port: DEFAULT_BRP_PORT };
+    for (const [key, value] of Object.entries(requiredArgs(catalog, name))) {
+      expectedParameters[key] = value;
+    }
+    if (name === 'world_query') {
+      const data = expectedParameters.data as Record<string, unknown>;
+      data['option'] = [];
+      data['has'] = [];
+    }
+    if (name !== 'world_mutate_components') {
+      assert.deepEqual(envelope(result).parameters, expectedParameters, `${name}: direct echo`);
+    } else {
+      assert.equal(envelope(result).parameters, undefined, `${name}: no echo without path`);
+    }
 
     // Forwarded BRP params keep the raw remaining fields (minus port).
     const { port: _port, ...raw } = args;
@@ -183,11 +208,12 @@ test('every direct tool normalizes null optionals in response parameters', async
   }
 });
 
-test('every direct tool converts BRP errors into an error envelope with error_info', async () => {
+test('every direct tool converts BRP errors into plain upstream error envelopes', async () => {
   const catalog = loadToolContractCatalog();
   for (const [name, method] of Object.entries(DIRECT_TOOLS)) {
     const fake = new FakeBrpClient();
-    fake.error = new BrpJsonRpcError(method, -32602, 'invalid params', { detail: 'x' });
+    // A non-format-class code keeps every tool on the plain-error path.
+    fake.error = new BrpJsonRpcError(method, -23403, 'invalid params', { detail: 'x' });
     const server = new McpServer({ name: 't', version: '0.0.0' });
     registerDirectTools(server, fakeServices(fake), catalog);
     const result = await registeredHandler(server, name)({ ...requiredArgs(catalog, name), port: 7777 });
@@ -196,13 +222,35 @@ test('every direct tool converts BRP errors into an error envelope with error_in
     assert.equal(env.status, 'error', `${name}: error status`);
     assert.equal(result.isError, true, `${name}: isError set`);
     assert.deepEqual(env.call_info, { mcp_tool: name, brp_method: method }, `${name}: call_info`);
-    assert.deepEqual(
-      env.error_info,
-      { code: -32602, message: fake.error.message, data: { detail: 'x' } },
-      `${name}: error_info`,
-    );
+    // Upstream appends the " (error code)" suffix and adds no other fields.
+    assert.equal(env.message, 'invalid params (error -23403)', `${name}: enhanced message`);
+    assert.equal('error_info' in env, false, `${name}: no error_info`);
+    assert.equal('metadata' in env, false, `${name}: no metadata`);
+    assert.equal('parameters' in env, false, `${name}: no parameters`);
     assert.equal('result' in env, false, `${name}: no result on error`);
   }
+});
+
+test('enhanced tools embed a type guide for format-class BRP errors', async () => {
+  const catalog = loadToolContractCatalog();
+  const fake = new FakeBrpClient();
+  fake.error = new BrpJsonRpcError('world.insert_components', -23402, 'Unknown component type: `fake::Nope`');
+  const server = new McpServer({ name: 't', version: '0.0.0' });
+  registerDirectTools(server, fakeServices(fake), catalog);
+  const result = await registeredHandler(server, 'world_insert_components')({
+    entity: 42,
+    components: { 'fake::Nope': {} },
+    port: 7777,
+  });
+
+  const env = envelope(result);
+  assert.equal(env.status, 'error');
+  assert.equal(env.message, "Format error - see 'type_guide' field for correct format");
+  const metadata = env.metadata as { original_error: string; type_guide: Record<string, unknown> };
+  assert.equal(metadata.original_error, 'Unknown component type: `fake::Nope`');
+  const guide = metadata.type_guide as { requested_types: string[]; type_guide: Record<string, unknown> };
+  assert.deepEqual(guide.requested_types, ['fake::Nope']);
+  assert.ok(guide.type_guide['fake::Nope']);
 });
 
 test('unexpected non-BRP errors propagate instead of being swallowed', async () => {

@@ -20,11 +20,14 @@ export class BrpHttpError extends BrpError {
 export class BrpJsonRpcError extends BrpError {
   readonly code: number;
   readonly data?: unknown;
+  /** The raw BRP error message, before this wrapper adds context. */
+  readonly brpMessage: string;
 
   constructor(method: string, code: number, message: string, data?: unknown) {
     super(`BRP call '${method}' failed with JSON-RPC error ${code}: ${message}`);
     this.code = code;
     this.data = data;
+    this.brpMessage = message;
   }
 }
 

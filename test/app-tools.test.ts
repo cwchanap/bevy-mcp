@@ -266,12 +266,12 @@ test('brp_launch builds the selected app once and spawns it referenced', async (
   assert.equal(metadata.binary_path, join(BASE, 'target', 'debug', 'fixture'));
   assert.equal(metadata.package_name, undefined);
 
-  const launchResult = env.result as { instances: { pid: number; log_file: string; port: number }[] };
-  assert.equal(launchResult.instances.length, 1);
-  assert.equal(launchResult.instances[0]!.pid, launch.process.pid);
-  assert.equal(launchResult.instances[0]!.port, 15702);
-  assert.equal(launchResult.instances[0]!.log_file, launch.logPath);
-  assert.ok(await logStore.read(launchResult.instances[0]!.log_file.split(/[/\\]/).pop()!));
+  const launchResult = env.result as { pid: number; log_file: string; port: number }[];
+  assert.equal(launchResult.length, 1);
+  assert.equal(launchResult[0]!.pid, launch.process.pid);
+  assert.equal(launchResult[0]!.port, 15702);
+  assert.equal(launchResult[0]!.log_file, launch.logPath);
+  assert.ok(await logStore.read(launchResult[0]!.log_file.split(/[/\\]/).pop()!));
 });
 
 test('brp_launch passes example args directly to the artifact (no cargo run)', async () => {
@@ -387,16 +387,16 @@ test('brp_launch runs ONE cargo build and spawns instance_count children on cons
   assert.equal(cargoBuildCalls.length, 1, 'exactly one cargo build');
   assert.equal(cargoBuildCalls[0]!.release, true);
 
-  const launchResult = env.result as { instances: { pid: number; log_file: string; port: number }[] };
+  const launchResult = env.result as { pid: number; log_file: string; port: number }[];
   assert.deepEqual(
-    launchResult.instances.map((instance) => instance.port),
+    launchResult.map((instance) => instance.port),
     [15702, 15703, 15704],
   );
   assert.deepEqual(
     processes.launches.map((launch) => launch.port),
     [15702, 15703, 15704],
   );
-  const logFiles = launchResult.instances.map((instance) => instance.log_file);
+  const logFiles = launchResult.map((instance) => instance.log_file);
   assert.equal(new Set(logFiles).size, 3, 'each instance gets its own log file');
   const listed = await logStore.list({ appName: 'fixture' });
   assert.equal(listed.length, 3);
@@ -452,7 +452,7 @@ test('brp_shutdown reports graceful shutdown and falls back to termination', asy
   assert.equal(gracefulEnv.status, 'success');
   assert.deepEqual(brp.shutdownCalls, [{ method: 'brp_extras/shutdown', port: 15702 }]);
   const gracefulMetadata = gracefulEnv.metadata as Record<string, unknown>;
-  assert.equal(gracefulMetadata.method, 'shutdown');
+  assert.equal(gracefulMetadata.shutdown_method, 'clean_shutdown');
   assert.equal(gracefulMetadata.pid, 5001);
   assert.equal(gracefulMetadata.app_name, 'fixture');
   assert.equal(gracefulMetadata.warning, undefined);
@@ -462,7 +462,7 @@ test('brp_shutdown reports graceful shutdown and falls back to termination', asy
   processes.waitResult = false;
   const timedOut = await call('brp_shutdown', { app_name: 'fixture', port: 15702 });
   const timedOutEnv = envelope(timedOut);
-  assert.equal((timedOutEnv.metadata as Record<string, unknown>).method, 'terminate');
+  assert.equal((timedOutEnv.metadata as Record<string, unknown>).shutdown_method, 'process_kill');
   assert.deepEqual(processes.terminated.length, 1);
   assert.match(
     (timedOutEnv.metadata as Record<string, unknown>).warning as string,
@@ -479,7 +479,7 @@ test('brp_shutdown terminates on BRP failure and errors when nothing is running'
   const fallback = await call('brp_shutdown', { app_name: 'fixture', port: 15702 });
   const fallbackEnv = envelope(fallback);
   assert.equal(fallbackEnv.status, 'success');
-  assert.equal((fallbackEnv.metadata as Record<string, unknown>).method, 'terminate');
+  assert.equal((fallbackEnv.metadata as Record<string, unknown>).shutdown_method, 'process_kill');
   assert.equal((fallbackEnv.metadata as Record<string, unknown>).pid, 5001);
   assert.equal(processes.terminated.length, 1);
 

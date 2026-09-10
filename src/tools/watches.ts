@@ -73,8 +73,9 @@ export function listActiveWatchesHandler(services: BevyMcpServices): OwnedToolHa
   return async () => {
     const callInfo = { mcp_tool: 'brp_list_active_watches' } as const;
     const watches = services.watches.list();
+    // Upstream `#[to_result]` places the bare array in `result`.
     return toolSuccess(callInfo, `Found ${watches.length} active watches`, {
-      result: { watches },
+      result: watches,
       metadata: { watch_count: watches.length },
     });
   };
@@ -89,7 +90,12 @@ export function stopWatchHandler(services: BevyMcpServices): OwnedToolHandler {
       return toolError(callInfo, 'watch_id must be a number');
     }
     if (!services.watches.stop(watchId)) {
-      return toolError(callInfo, `Failed to stop watch ${watchId}: watch not found`);
+      // Upstream double-wraps the manager failure through its error stack
+      // (`Watch operation failed:`), so the message text repeats.
+      return toolError(
+        callInfo,
+        `Failed to stop watch ${watchId}: Watch operation failed: Failed to stop watch ${watchId}: watch not found`,
+      );
     }
     return toolSuccess(callInfo, `Stopped watch ${watchId}`, { metadata: { watch_id: watchId } });
   };

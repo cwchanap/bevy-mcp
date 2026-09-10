@@ -48,8 +48,9 @@ export interface ReadLogResult {
   size_human: string;
   lines_read: number;
   content: string;
-  filtered_by_keyword: 'Unfiltered' | 'Filtered';
-  tail_mode: 'FullFile' | 'Tail';
+  /** Upstream serializes both modes as booleans (`serde(from/into = "bool")`). */
+  filtered_by_keyword: boolean;
+  tail_mode: boolean;
 }
 
 interface LogEntry {
@@ -129,6 +130,11 @@ export async function appendRecord(path: string, updateType: string, data: unkno
 export class LogStore {
   /** Default root is the production `<tmp>/bevy-mcp`; tests inject a base. */
   constructor(private readonly root: string = join(tmpdir(), 'bevy-mcp')) {}
+
+  /** The absolute log root all log files live under. */
+  get directory(): string {
+    return this.root;
+  }
 
   private get appsRoot(): string {
     return join(this.root, APPS_DIR);
@@ -222,8 +228,8 @@ export class LogStore {
       size_human: formatBytes(metadata.size),
       lines_read: lines.length,
       content: lines.join('\n'),
-      filtered_by_keyword: keyword === undefined ? 'Unfiltered' : 'Filtered',
-      tail_mode: tailLines === undefined ? 'FullFile' : 'Tail',
+      filtered_by_keyword: keyword !== undefined,
+      tail_mode: tailLines !== undefined,
     };
   }
 

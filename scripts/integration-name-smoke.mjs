@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Early live smoke for the owned server's name-discovery composite:
 //   build the fixture if needed -> start it on BRP port 15702 ->
-//   start build/owned-index.js over stdio MCP -> world_find_entities_by_name
+//   start build/index.js over stdio MCP -> world_find_entities_by_name
 //   for FixturePrimary -> assert exactly one match with a safe entity id ->
 //   close both processes. Exit 0 on pass, 1 on any failure.
 //
@@ -76,7 +76,7 @@ async function main() {
 
     const transport = new StdioClientTransport({
       command: process.execPath,
-      args: ['build/owned-index.js'],
+      args: ['build/index.js'],
       cwd: repoRoot,
       stderr: 'inherit',
       // Full env: the owned server must be able to reach the fixture exactly
@@ -86,7 +86,7 @@ async function main() {
     const client = new Client({ name: 'bevy-plugin-name-smoke', version: '1.0.0' });
     await client.connect(transport);
     serverPid = transport.pid;
-    log(`connected to build/owned-index.js (pid ${serverPid})`);
+    log(`connected to build/index.js (pid ${serverPid})`);
 
     const res = await client.callTool(
       { name: 'world_find_entities_by_name', arguments: { name: 'FixturePrimary' } },

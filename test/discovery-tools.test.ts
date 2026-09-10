@@ -311,7 +311,7 @@ test('brp_execute reports discovery transport failures with stage metadata', asy
   });
 });
 
-test('brp_execute reports BRP invocation failures with error_info details', async () => {
+test('brp_execute reports BRP invocation failures with execution metadata', async () => {
   const { fake, call } = setup();
   fake.responses.set('rpc.discover', { methods: [{ name: 'world.get_components' }] });
   fake.errors.set(
@@ -323,10 +323,12 @@ test('brp_execute reports BRP invocation failures with error_info details', asyn
 
   assert.equal(env.status, 'error');
   assert.equal(result.isError, true);
-  assert.match(env.message, /JSON-RPC error -32602/);
-  assert.deepEqual(env.error_info, {
+  assert.equal(env.message, 'bad entity');
+  assert.deepEqual(env.metadata, {
+    stage: 'execution',
+    method: 'world.get_components',
+    port: 15702,
     code: -32602,
-    message: fake.errors.get('world.get_components')!.message,
     data: { detail: 'x' },
   });
 });
@@ -360,9 +362,11 @@ test('brp_list_agent_tools preserves the catalog result and reports the count', 
   assert.deepEqual(env.call_info, { mcp_tool: 'brp_list_agent_tools' });
   assert.equal(env.message, 'Listed 2 agent tools');
   assert.deepEqual(env.metadata, { tool_count: 2 });
+  // The wire `version` envelope is dropped; the public payload is exactly
+  // `{usage, tools}`.
   assert.deepEqual(env.result, {
     usage: "Pass an entry's method and matching params to brp_execute.",
-    ...catalog,
+    tools: catalog.tools,
   });
 });
 

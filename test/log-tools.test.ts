@@ -99,8 +99,13 @@ test('brp_list_logs accepts only {app_name?, verbose?} and returns {logs} upstre
   assert.equal(env.status, 'success');
   assert.equal(env.message, 'Found 2 log files');
   assert.deepEqual(env.call_info, { mcp_tool: 'brp_list_logs' });
-  assert.deepEqual(env.metadata, { log_count: 2 });
-  const logs = (env.result as { logs: { filename: string; app_name: string }[] }).logs;
+  // Upstream metadata carries the log directory alongside the count.
+  assert.deepEqual(env.metadata, {
+    temp_directory: logStore.directory,
+    log_count: 2,
+  });
+  // Upstream `#[to_result]` places the bare array in `result`.
+  const logs = env.result as { filename: string; app_name: string }[];
   assert.equal(logs.length, 2);
   for (const log of logs) {
     assert.deepEqual(Object.keys(log).sort(), ['app_name', 'filename'], 'minimal listing fields');
@@ -117,13 +122,19 @@ test('brp_list_logs accepts only {app_name?, verbose?} and returns {logs} upstre
     }),
   );
   assert.equal(filtered.status, 'success');
-  const filteredLogs = (filtered.result as { logs: unknown[] }).logs;
-  assert.equal(filteredLogs.length, 1);
-  assert.equal((filteredLogs[0] as { app_name: string }).app_name, 'myapp');
+  assert.deepEqual(filtered.metadata, {
+    temp_directory: logStore.directory,
+    log_count: 1,
+  });
+  const filteredLogs = filtered.result as { logs: unknown[] }[] | unknown[];
+  const filteredList = Array.isArray(filteredLogs) ? filteredLogs : [];
+  assert.equal(filteredList.length, 1);
+  assert.equal((filteredList[0] as { app_name: string }).app_name, 'myapp');
 
   // verbose delegates to LogStore and adds the metadata fields.
   const verbose = envelope(await call('brp_list_logs', { app_name: 'myapp', verbose: true }));
-  const verboseLog = (verbose.result as { logs: Record<string, unknown>[] }).logs[0]!;
+  const verboseLogs = verbose.result as Record<string, unknown>[];
+  const verboseLog = verboseLogs[0]!;
   assert.deepEqual(Object.keys(verboseLog).sort(), [
     'app_name',
     'created',
@@ -155,8 +166,8 @@ test('brp_read_log accepts only {filename, keyword?, tail_lines?} and splits con
   assert.equal(typeof fullMetadata.size_bytes, 'number');
   assert.match(fullMetadata.size_human as string, /\d/);
   assert.equal(fullMetadata.lines_read, 4);
-  assert.equal(fullMetadata.filtered_by_keyword, 'Unfiltered');
-  assert.equal(fullMetadata.tail_mode, 'FullFile');
+  assert.equal(fullMetadata.filtered_by_keyword, false);
+  assert.equal(fullMetadata.tail_mode, false);
   assert.equal(
     fullEnv.result,
     '[t1] INFO: started\n[t2] ERROR: boom\n[t3] INFO: ready\n[t4] ERROR: kaboom',
@@ -165,13 +176,13 @@ test('brp_read_log accepts only {filename, keyword?, tail_lines?} and splits con
   // Keyword filter (case-insensitive) delegates to LogStore.
   const keyword = envelope(await call('brp_read_log', { filename, keyword: 'ERROR' }));
   assert.equal((keyword.metadata as Record<string, unknown>).lines_read, 2);
-  assert.equal((keyword.metadata as Record<string, unknown>).filtered_by_keyword, 'Filtered');
+  assert.equal((keyword.metadata as Record<string, unknown>).filtered_by_keyword, true);
   assert.equal(keyword.result, '[t2] ERROR: boom\n[t4] ERROR: kaboom');
 
   // Tail mode delegates to LogStore.
   const tail = envelope(await call('brp_read_log', { filename, tail_lines: 2 }));
   assert.equal((tail.metadata as Record<string, unknown>).lines_read, 2);
-  assert.equal((tail.metadata as Record<string, unknown>).tail_mode, 'Tail');
+  assert.equal((tail.metadata as Record<string, unknown>).tail_mode, true);
   assert.equal(tail.result, '[t3] INFO: ready\n[t4] ERROR: kaboom');
 });
 

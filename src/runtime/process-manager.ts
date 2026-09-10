@@ -34,7 +34,7 @@ export interface TrackedProcess {
   isAlive(): boolean;
 }
 
-/** Spawn seam so tests fake children (same pattern as the launcher's SpawnImpl). */
+/** Spawn seam so tests fake children (async process execution stays injectable). */
 export type SpawnImpl = (
   command: string,
   args: readonly string[],

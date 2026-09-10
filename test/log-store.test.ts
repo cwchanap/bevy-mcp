@@ -85,20 +85,20 @@ test('read returns upstream-compatible fields, keyword and tail support', async 
   assert.equal(full.filename, filename);
   assert.equal(full.file_path, path);
   assert.equal(full.lines_read, 4);
-  assert.equal(full.filtered_by_keyword, 'Unfiltered');
-  assert.equal(full.tail_mode, 'FullFile');
+  assert.equal(full.filtered_by_keyword, false);
+  assert.equal(full.tail_mode, false);
   assert.ok(full.size_bytes > 0);
   assert.match(full.size_human, /^\d+ B$/);
 
   const keyword = await logStore.read(filename, { keyword: 'component_update' });
   assert.equal(keyword.lines_read, 2);
-  assert.equal(keyword.filtered_by_keyword, 'Filtered');
+  assert.equal(keyword.filtered_by_keyword, true);
   assert.ok(keyword.content.includes('"x":2'));
   assert.ok(!keyword.content.includes('WATCH_STARTED'));
 
   const tail = await logStore.read(filename, { tailLines: 2 });
   assert.equal(tail.lines_read, 2);
-  assert.equal(tail.tail_mode, 'Tail');
+  assert.equal(tail.tail_mode, true);
   // Tail takes the LAST two lines.
   assert.deepEqual(tail.content.split('\n'), [
     '[2026-01-01 10:00:02.000] COMPONENT_UPDATE: {"Position":{"x":2}}',

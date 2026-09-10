@@ -2,7 +2,8 @@ import { DEFAULT_BRP_PORT } from '../brp/client.js';
 import { BrpError } from '../brp/errors.js';
 import type { BevyMcpServices } from '../services.js';
 import { findEntitiesByName } from './discovery.js';
-import { brpErrorInfo, toolError, toolSuccess } from './response.js';
+import { toolError, toolSuccess } from './response.js';
+import { directBrpErrorExtras } from './brp-shape.js';
 import type { OwnedToolHandler } from './register.js';
 
 /**
@@ -40,7 +41,8 @@ const SCREENSHOT_METHOD = 'brp_extras/screenshot';
  */
 export function screenshotHandler(services: BevyMcpServices): OwnedToolHandler {
   return async (args) => {
-    const callInfo = { mcp_tool: 'brp_extras_screenshot' } as const;
+    // Upstream registers this tool as a BRP tool for brp_extras/screenshot.
+    const callInfo = { mcp_tool: 'brp_extras_screenshot', brp_method: SCREENSHOT_METHOD } as const;
     const { entity, name, camera, padding, path } = args;
     const port = typeof args.port === 'number' ? args.port : DEFAULT_BRP_PORT;
 
@@ -81,11 +83,28 @@ export function screenshotHandler(services: BevyMcpServices): OwnedToolHandler {
     params.path = path;
 
     try {
-      await services.brp.call(SCREENSHOT_METHOD, params, { port });
-      return toolSuccess(callInfo, `Screenshot saved to ${String(path)}`);
+      const result = await services.brp.call(SCREENSHOT_METHOD, params, { port });
+      // Upstream metadata: selector entity/name, each skipped when absent.
+      const metadata = {
+        ...(entity !== undefined ? { entity } : {}),
+        ...(typeof name === 'string' ? { name } : {}),
+      };
+      return toolSuccess(callInfo, `Screenshot saved to ${String(path)}`, {
+        ...(Object.keys(metadata).length > 0 ? { metadata } : {}),
+        ...(result !== undefined && result !== null ? { result } : {}),
+      });
     } catch (error) {
       if (!(error instanceof BrpError)) throw error;
-      return toolError(callInfo, error.message, { error_info: brpErrorInfo(error) });
+      const shaped = await directBrpErrorExtras(
+        services,
+        'brp_extras_screenshot',
+        SCREENSHOT_METHOD,
+        args,
+        error,
+      );
+      return toolError(callInfo, shaped.message, {
+        ...(shaped.metadata !== undefined ? { metadata: shaped.metadata } : {}),
+      });
     }
   };
 }
