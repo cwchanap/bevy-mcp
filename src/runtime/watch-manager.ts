@@ -1,4 +1,6 @@
 import { DEFAULT_BRP_PORT, type BrpClient } from '../brp/client.js';
+import { BrpPrecisionError } from '../brp/errors.js';
+import { assertSafeIntegers } from '../brp/safe-json.js';
 import { appendRecord, type LogStore } from './log-store.js';
 
 /**
@@ -80,12 +82,18 @@ export class SseLineSplitter {
   }
 }
 
-export type ParsedSseLine = { ok: true; result: unknown } | { ok: false };
+export type ParsedSseLine =
+  | { ok: true; result: unknown }
+  | { ok: false }
+  | { ok: false; unsafe: true; error: string };
 
 /**
  * Parse one SSE line. Only `data: {json}` lines whose JSON-RPC response
  * carries a `result` produce an update record; non-data lines, malformed
- * JSON, and error responses are skipped without failing the stream.
+ * JSON, and error responses are skipped without failing the stream. A record
+ * carrying an unsafe 64-bit integer is NOT silently logged: it is reported
+ * (`unsafe`) with the failing path so the pump can surface an error record —
+ * same fail-loud rule as instant calls — while the stream stays alive.
  */
 export function parseSseDataLine(line: string): ParsedSseLine {
   if (!line.startsWith(SSE_DATA_PREFIX)) return { ok: false };
@@ -98,6 +106,19 @@ export function parseSseDataLine(line: string): ParsedSseLine {
   if (data === null || typeof data !== 'object' || !('result' in data)) return { ok: false };
   const result = (data as { result?: unknown }).result;
   if (result === undefined) return { ok: false };
+  try {
+    assertSafeIntegers(data, 'watch', 'record');
+  } catch (error) {
+    if (error instanceof BrpPrecisionError)
+      return {
+        ok: false,
+        unsafe: true,
+        // Name the path only: the corrupted float is never reproduced, so it
+        // cannot land in the log masquerading as the real 64-bit value.
+        error: `Watch record contained an unsafe integer at ${error.path}; the value was dropped to avoid 64-bit precision loss.`,
+      };
+    throw error;
+  }
   return { ok: true, result };
 }
 
@@ -200,7 +221,16 @@ export class WatchManager {
   async #pump(entry: ActiveEntry, response: Response): Promise<void> {
     const onLine = (line: string): void => {
       const parsed = parseSseDataLine(line);
-      if (parsed.ok) void appendRecord(entry.path, 'COMPONENT_UPDATE', parsed.result);
+      if (parsed.ok) {
+        void appendRecord(entry.path, 'COMPONENT_UPDATE', parsed.result);
+      } else if ('unsafe' in parsed) {
+        void appendRecord(entry.path, 'ERROR', {
+          watch_type: WATCH_TYPES[entry.kind],
+          entity: entry.entity,
+          error: parsed.error,
+          timestamp: new Date().toISOString(),
+        });
+      }
     };
     const splitter = new SseLineSplitter();
     try {

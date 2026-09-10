@@ -54,9 +54,14 @@ export class BrpAbortError extends BrpError {
 
 /** A decoded JSON integer would lose 64-bit precision (e.g. entity ids). */
 export class BrpPrecisionError extends BrpError {
+  /** The JSON path of the offending value, so reporters can name the location
+   * without reproducing the already-corrupted float. */
+  readonly path: string;
+
   constructor(method: string, path: string, value: number) {
     super(
       `BRP call '${method}' returned an unsafe integer at ${path}: ${value} would lose 64-bit precision`,
     );
+    this.path = path;
   }
 }

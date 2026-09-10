@@ -48,10 +48,6 @@ interface TrackedChild extends TrackedProcess {
   child: ChildProcess;
 }
 
-function delay(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
 /** Process/app lifecycle operations the owned tools use. */
 export interface ProcessService {
   launch(spec: LaunchSpec): TrackedProcess;
@@ -124,8 +120,21 @@ export class ProcessManager implements ProcessService {
     return this.#children.filter((entry) => entry.appName === appName);
   }
 
+  /**
+   * Resolves true when the child exited within `timeoutMs`. The losing
+   * timeout is cleared on settle so it never keeps the event loop (and an
+   * exiting process) alive for the remaining grace period.
+   */
   async waitForExit(process: TrackedProcess, timeoutMs: number): Promise<boolean> {
-    return Promise.race([process.exited.then(() => true), delay(timeoutMs).then(() => false)]);
+    let timer: NodeJS.Timeout | undefined;
+    const expired = new Promise<boolean>((resolve) => {
+      timer = setTimeout(() => resolve(false), timeoutMs);
+    });
+    try {
+      return await Promise.race([process.exited.then(() => true), expired]);
+    } finally {
+      clearTimeout(timer);
+    }
   }
 
   async terminate(process: TrackedProcess): Promise<void> {

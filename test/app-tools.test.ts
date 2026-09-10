@@ -442,6 +442,54 @@ test('brp_status combines tracked state with the rpc.discover readiness probe', 
   assert.equal((foreignEnv.error_info as Record<string, unknown>).brp_responding_on_port, true);
 });
 
+test('multiple instances: a provided port targets one child, no port is ambiguous', async () => {
+  const { call, processes, brp } = harness();
+  await call('brp_launch', { target_name: 'fixture', path: BASE, port: 15702 });
+  await call('brp_launch', { target_name: 'fixture', path: BASE, port: 15703 });
+  assert.equal(processes.findByApp('fixture').length, 2);
+
+  // brp_status with a port: only that instance (name AND port match).
+  const scoped = await call('brp_status', { app_name: 'fixture', port: 15703 });
+  const scopedEnv = envelope(scoped);
+  assert.equal(scopedEnv.status, 'success');
+  assert.deepEqual(scopedEnv.metadata, { app_name: 'fixture', pid: 5002, port: 15703 });
+
+  // brp_status without a port: ambiguity error listing every instance.
+  const ambiguous = await call('brp_status', { app_name: 'fixture' });
+  assert.equal(ambiguous.isError, true);
+  const ambiguousEnv = envelope(ambiguous);
+  assert.match(ambiguousEnv.message, /Multiple running instances of 'fixture'/);
+  assert.match(ambiguousEnv.message, /ports 15702, 15703/);
+  assert.match(ambiguousEnv.message, /Specify 'port'/);
+  assert.deepEqual(ambiguousEnv.error_info, {
+    app_name: 'fixture',
+    instances: [
+      { pid: 5001, port: 15702 },
+      { pid: 5002, port: 15703 },
+    ],
+  });
+
+  // brp_shutdown with a port: only that child is terminated.
+  brp.shutdownError = new BrpError('connect ECONNREFUSED');
+  const scopedShutdown = await call('brp_shutdown', { app_name: 'fixture', port: 15702 });
+  const scopedShutdownEnv = envelope(scopedShutdown);
+  assert.equal(scopedShutdownEnv.status, 'success');
+  assert.equal((scopedShutdownEnv.metadata as Record<string, unknown>).pid, 5001);
+  assert.equal(
+    (scopedShutdownEnv.metadata as Record<string, unknown>).shutdown_method,
+    'process_kill',
+  );
+  assert.deepEqual(processes.terminated.map((process) => process.pid), [5001]);
+
+  // brp_shutdown without a port: ambiguity error before any BRP traffic.
+  brp.shutdownCalls.length = 0;
+  const ambiguousShutdown = await call('brp_shutdown', { app_name: 'fixture' });
+  assert.equal(ambiguousShutdown.isError, true);
+  assert.match(envelope(ambiguousShutdown).message, /Multiple running instances of 'fixture'/);
+  assert.deepEqual(brp.shutdownCalls, [], 'no graceful call before disambiguation');
+  assert.equal(processes.terminated.length, 1, 'no additional termination');
+});
+
 test('brp_shutdown reports graceful shutdown and falls back to termination', async () => {
   const { call, processes, brp } = harness();
   await call('brp_launch', { target_name: 'fixture', path: BASE, port: 15702 });

@@ -1,12 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import type { CallToolResult } from '@modelcontextprotocol/server';
+import { McpServer, type CallToolResult } from '@modelcontextprotocol/server';
 import {
   toolError,
   toolSuccess,
   type CallInfo,
   type ToolCallJsonResponse,
 } from '../src/tools/response.js';
+import { registerOwnedTool } from '../src/tools/register.js';
 import { loadToolContractCatalog } from '../src/tool-contracts.js';
 
 const localCall: CallInfo = { mcp_tool: 'brp_list_logs' };
@@ -66,6 +67,37 @@ test('toolSuccess normalizes null optionals into optional_parameters_not_provide
     app_name: 'bevy_app',
     optional_parameters_not_provided: ['verbose', 'port'],
   });
+});
+
+test('parameter echo regenerates the text content from the final structuredContent', async () => {
+  const server = new McpServer({ name: 't', version: '0.0.0' });
+  registerOwnedTool(
+    server,
+    loadToolContractCatalog(),
+    'brp_list_bevy',
+    async () =>
+      toolSuccess({ mcp_tool: 'brp_list_bevy' }, 'Found 0 Bevy targets', {
+        metadata: { count: 0 },
+        result: [],
+        parameters: { path: null },
+      }),
+  );
+  const handler = (
+    server as unknown as {
+      _registeredTools: Record<
+        string,
+        { handler: (args: Record<string, unknown>) => Promise<CallToolResult> }
+      >;
+    }
+  )._registeredTools['brp_list_bevy'].handler;
+
+  const result = await handler({ path: null });
+  const envelopeValue = envelope(result);
+
+  // The echo was applied to structuredContent (null optional normalized)...
+  assert.deepEqual(envelopeValue.parameters, { optional_parameters_not_provided: ['path'] });
+  // ...and the text content is exactly that final envelope, one source.
+  assert.equal((result.content[0] as { text: string }).text, JSON.stringify(envelopeValue));
 });
 
 test('tool catalog exposes exactly the 47 captured tools and throws on unknown', () => {

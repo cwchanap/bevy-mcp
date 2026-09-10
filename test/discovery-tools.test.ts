@@ -333,6 +333,26 @@ test('brp_execute reports BRP invocation failures with execution metadata', asyn
   });
 });
 
+test('brp_execute wraps execution-stage transport failures in the error envelope', async () => {
+  const { fake, call } = setup();
+  fake.responses.set('rpc.discover', { methods: [{ name: 'world.get_components' }] });
+  fake.errors.set('world.get_components', new BrpError('connect ECONNREFUSED 127.0.0.1:15702'));
+  const result = await call('brp_execute', { method: 'world.get_components' });
+  const env = envelope(result);
+
+  // No raw rethrow: the standard error envelope with error_info, like every
+  // other failure path.
+  assert.equal(env.status, 'error');
+  assert.equal(result.isError, true);
+  assert.equal(env.message, 'connect ECONNREFUSED 127.0.0.1:15702');
+  assert.deepEqual(env.metadata, {
+    stage: 'execution',
+    method: 'world.get_components',
+    port: 15702,
+  });
+  assert.deepEqual(env.error_info, { message: 'connect ECONNREFUSED 127.0.0.1:15702' });
+});
+
 test('brp_execute omits params on the wire when the caller passes none', async () => {
   const { fake, call } = setup();
   fake.responses.set('rpc.discover', { openrpc: '1.3.2', methods: [{ name: 'rpc.discover' }] });

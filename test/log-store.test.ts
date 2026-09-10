@@ -1,6 +1,14 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
+import {
+  existsSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  symlinkSync,
+  utimesSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { LogStore } from '../src/runtime/log-store.js';
@@ -147,6 +155,57 @@ test('delete by appName spares watch logs; delete all removes everything', async
   const everything = await logStore.delete({});
   assert.ok(everything.includes(watchName));
   assert.deepEqual(await logStore.list(), []);
+});
+
+test('read and delete refuse symlinks planted in the owned roots', async () => {
+  // Fresh root so the probe cannot interact with other cases.
+  const base = mkdtempSync(join(tmpdir(), 'bevy-mcp-log-symlink-'));
+  const store = new LogStore(base);
+  try {
+    const { filename } = await store.createAppLog('realfile');
+    const outside = join(base, 'outside-target.log');
+    writeFileSync(outside, 'secret\n');
+    const linkName = 'bevy-mcp_evil_1.log';
+    symlinkSync(outside, join(base, 'apps', linkName));
+
+    // read: the symlink is not an owned file and is never followed.
+    await assert.rejects(() => store.read(linkName), /not found/);
+    assert.equal(readFileSync(outside, 'utf8'), 'secret\n', 'target untouched by read');
+
+    // list never surfaces it; delete never removes it (link or target).
+    assert.ok(!(await store.list()).some((log) => log.filename === linkName));
+    const deleted = await store.delete({});
+    assert.ok(deleted.includes(filename), 'real owned files still delete');
+    assert.ok(!deleted.includes(linkName), 'symlinks are not deleted');
+    assert.ok(existsSync(join(base, 'apps', linkName)), 'the link itself survives');
+    assert.equal(readFileSync(outside, 'utf8'), 'secret\n', 'target survives delete');
+  } finally {
+    rmSync(base, { recursive: true, force: true });
+  }
+});
+
+test('concurrent same-second createAppLog calls allocate distinct files', async () => {
+  const base = mkdtempSync(join(tmpdir(), 'bevy-mcp-log-race-'));
+  const store = new LogStore(base);
+  try {
+    // Same app name, same millisecond: the exclusive create must never
+    // truncate one file to satisfy the other.
+    const [a, b, c] = await Promise.all([
+      store.createAppLog('racer'),
+      store.createAppLog('racer'),
+      store.createAppLog('racer'),
+    ]);
+    const names = new Set([a.filename, b.filename, c.filename]);
+    assert.equal(names.size, 3, 'three distinct filenames');
+    for (const allocation of [a, b, c]) {
+      assert.match(allocation.filename, /^bevy-mcp_racer_\d+\.log$/);
+      assert.ok(existsSync(allocation.path));
+    }
+    // All three remain readable through the owned roots.
+    for (const name of names) assert.ok(await store.read(name));
+  } finally {
+    rmSync(base, { recursive: true, force: true });
+  }
 });
 
 test('delete olderThanSeconds respects modification age', async () => {

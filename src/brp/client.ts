@@ -4,9 +4,9 @@ import {
   BrpHttpError,
   BrpJsonRpcError,
   BrpMalformedResponseError,
-  BrpPrecisionError,
   BrpTimeoutError,
 } from './errors.js';
+import { assertSafeIntegers } from './safe-json.js';
 import type { BrpJsonRpcRequest, BrpJsonRpcResponse } from './types.js';
 
 /** Bevy's BRP HTTP endpoint listens on localhost at this port by default. */
@@ -21,6 +21,14 @@ export interface BrpCallOptions {
   signal?: AbortSignal;
 }
 
+/** A consumed instant-call response: status line plus the full body text. */
+interface PostedResponse {
+  status: number;
+  statusText: string;
+  ok: boolean;
+  text: string;
+}
+
 /**
  * JSON-RPC 2.0 client for Bevy's BRP HTTP endpoint. One POST per call —
  * no retry, no method cache.
@@ -33,19 +41,27 @@ export class BrpClient {
     const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
     const response = await this.post(method, params, options, timeoutMs);
     if (!response.ok) {
-      await drain(response);
       throw new BrpHttpError(response.status, response.statusText);
     }
-    const text = await response.text();
     let decoded: unknown;
     try {
-      decoded = JSON.parse(text);
+      decoded = JSON.parse(response.text);
     } catch (cause) {
       throw new BrpMalformedResponseError(method, { cause });
     }
     assertSafeIntegers(decoded, method, 'result');
+    // Typed rejection for bodies that parse but are not JSON-RPC envelopes:
+    // null/primitives/arrays, or objects without a result or error member.
+    if (
+      decoded === null ||
+      typeof decoded !== 'object' ||
+      Array.isArray(decoded) ||
+      (!('result' in decoded) && !('error' in decoded))
+    ) {
+      throw new BrpMalformedResponseError(method);
+    }
     const envelope = decoded as BrpJsonRpcResponse;
-    if (envelope !== null && typeof envelope === 'object' && envelope.error !== undefined) {
+    if (envelope.error !== undefined) {
       throw new BrpJsonRpcError(
         method,
         envelope.error.code,
@@ -85,12 +101,17 @@ export class BrpClient {
     return this.call('rpc.discover', undefined, { port });
   }
 
+  /**
+   * POST one instant call and consume the body inside the timeout/abort
+   * window: the abort guard stays armed until the body is fully read, so a
+   * server that stalls after the headers still hits the deadline.
+   */
   private async post(
     method: string,
     params: unknown,
     options: BrpCallOptions,
     timeoutMs: number,
-  ): Promise<Response> {
+  ): Promise<PostedResponse> {
     const controller = new AbortController();
     let timedOut = false;
     const timer = setTimeout(() => {
@@ -101,12 +122,14 @@ export class BrpClient {
     options.signal?.addEventListener('abort', forwardAbort, { once: true });
     if (options.signal?.aborted) controller.abort();
     try {
-      return await fetch(this.endpointUrl(options.port), {
+      const response = await fetch(this.endpointUrl(options.port), {
         method: 'POST',
         headers: this.headers(),
         body: JSON.stringify(this.request(method, params)),
         signal: controller.signal,
       });
+      const text = await response.text();
+      return { status: response.status, statusText: response.statusText, ok: response.ok, text };
     } catch (cause) {
       if (timedOut) throw new BrpTimeoutError(method, timeoutMs);
       if (options.signal?.aborted) throw new BrpAbortError(method);
@@ -132,27 +155,6 @@ export class BrpClient {
     const request: BrpJsonRpcRequest = { jsonrpc: '2.0', id: this.nextId++, method };
     if (params !== undefined) request.params = params;
     return request;
-  }
-}
-
-/**
- * Reject any decoded JSON integer that is not a safe JavaScript integer
- * (64-bit entity ids and component integers), naming the method and the
- * value path. Floats are untouched.
- */
-function assertSafeIntegers(value: unknown, method: string, path: string): void {
-  if (typeof value === 'number') {
-    if (Number.isInteger(value) && !Number.isSafeInteger(value)) {
-      throw new BrpPrecisionError(method, path, value);
-    }
-    return;
-  }
-  if (Array.isArray(value)) {
-    value.forEach((item, index) => assertSafeIntegers(item, method, `${path}[${index}]`));
-  } else if (value !== null && typeof value === 'object') {
-    for (const [key, item] of Object.entries(value)) {
-      assertSafeIntegers(item, method, `${path}.${key}`);
-    }
   }
 }
 

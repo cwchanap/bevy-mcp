@@ -1,9 +1,11 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { readdir } from 'node:fs/promises';
 import { basename, join, relative, resolve } from 'node:path';
+import type { CallToolResult } from '@modelcontextprotocol/server';
 import { DEFAULT_BRP_PORT } from '../brp/client.js';
 import { BrpError } from '../brp/errors.js';
 import type { BevyTarget } from '../runtime/cargo.js';
+import type { TrackedProcess } from '../runtime/process-manager.js';
 import type { BevyMcpServices } from '../services.js';
 import { toolError, toolSuccess } from './response.js';
 import type { OwnedToolHandler } from './register.js';
@@ -388,6 +390,54 @@ async function isBrpResponding(services: BevyMcpServices, port: number): Promise
   }
 }
 
+interface InstanceSelection {
+  tracked?: TrackedProcess;
+  /** All alive same-name instances when no port was given and the match is
+   * ambiguous (caller must pass `port`). */
+  ambiguous?: TrackedProcess[];
+}
+
+/**
+ * Pick the tracked child for brp_status/brp_shutdown. With an explicit port
+ * the match is app name AND port (multiple instances of one app live on
+ * consecutive ports); without one there must be exactly one alive instance,
+ * otherwise the selection is reported as ambiguous.
+ */
+function selectInstance(
+  processes: BevyMcpServices['processes'],
+  appName: string,
+  port: number,
+  portProvided: boolean,
+): InstanceSelection {
+  const alive = processes.findByApp(appName).filter((process) => process.isAlive());
+  if (portProvided) {
+    return { tracked: alive.find((process) => process.port === port) };
+  }
+  if (alive.length > 1) return { ambiguous: alive };
+  return { tracked: alive[0] };
+}
+
+/** The upstream-shaped error naming every candidate instance. */
+function ambiguousInstanceError(
+  callInfo: { mcp_tool: string },
+  appName: string,
+  instances: TrackedProcess[],
+  args: Record<string, unknown>,
+): CallToolResult {
+  const ports = [...new Set(instances.map((instance) => instance.port))].sort((a, b) => a - b);
+  return toolError(
+    callInfo,
+    `Multiple running instances of '${appName}' found (ports ${ports.join(', ')}). Specify 'port' to target one instance.`,
+    {
+      parameters: args,
+      error_info: {
+        app_name: appName,
+        instances: instances.map((instance) => ({ pid: instance.pid, port: instance.port })),
+      },
+    },
+  );
+}
+
 /** `brp_status {app_name, port?}`: tracked-process state combined with a live
  * `rpc.discover` readiness probe on the app's port. */
 export function statusHandler(services: BevyMcpServices): OwnedToolHandler {
@@ -397,8 +447,13 @@ export function statusHandler(services: BevyMcpServices): OwnedToolHandler {
     if (appName === undefined) {
       return toolError(callInfo, 'app_name is required', { parameters: args });
     }
-    const port = typeof args.port === 'number' ? args.port : DEFAULT_BRP_PORT;
-    const tracked = services.processes.findByApp(appName).find((p) => p.isAlive());
+    const portProvided = typeof args.port === 'number';
+    const port = portProvided ? (args.port as number) : DEFAULT_BRP_PORT;
+    const selection = selectInstance(services.processes, appName, port, portProvided);
+    if (selection.ambiguous) {
+      return ambiguousInstanceError(callInfo, appName, selection.ambiguous, args);
+    }
+    const tracked = selection.tracked;
     const responding = await isBrpResponding(services, port);
 
     if (tracked) {
@@ -438,8 +493,13 @@ export function shutdownHandler(services: BevyMcpServices): OwnedToolHandler {
     if (appName === undefined) {
       return toolError(callInfo, 'app_name is required', { parameters: args });
     }
-    const port = typeof args.port === 'number' ? args.port : DEFAULT_BRP_PORT;
-    const tracked = services.processes.findByApp(appName).find((p) => p.isAlive());
+    const portProvided = typeof args.port === 'number';
+    const port = portProvided ? (args.port as number) : DEFAULT_BRP_PORT;
+    const selection = selectInstance(services.processes, appName, port, portProvided);
+    if (selection.ambiguous) {
+      return ambiguousInstanceError(callInfo, appName, selection.ambiguous, args);
+    }
+    const tracked = selection.tracked;
 
     let brpShutdown = false;
     let responsePid: number | undefined;

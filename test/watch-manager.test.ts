@@ -141,6 +141,62 @@ test('SSE parse: valid results pass; malformed and non-data lines never crash', 
   }
 });
 
+test('unsafe 64-bit integers in SSE records log an error record, loop continues', async () => {
+  const logStore = makeLogStore();
+  const fake = fakeStreamBrp();
+  const manager = new WatchManager(logStore, fake.brp);
+  const watch = await manager.startGetComponents(42, ['A']);
+
+  const unsafeLine = `data: {"jsonrpc":"2.0","id":1,"result":{"entity_id":${2 ** 63}}}`;
+  fake.send(`${unsafeLine}\n`);
+  fake.send('data: {"jsonrpc":"2.0","id":2,"result":{"components":["A"]}}\n');
+  fake.close();
+
+  await until(async () => {
+    const log = await logStore.read(watch.filename);
+    return log.content.includes('WATCH_ENDED');
+  }, 'the watch to end');
+
+  const log = await logStore.read(watch.filename);
+  assert.ok(log.content.includes('ERROR'), 'an ERROR record names the failure');
+  assert.ok(log.content.includes('entity_id'), 'the error names the unsafe value path');
+  assert.ok(log.content.includes('unsafe integer'), 'the error explains the precision failure');
+  // The corrupted record is never logged as a COMPONENT_UPDATE...
+  assert.ok(!log.content.includes('"entity_id":9223372036854776000'));
+  // ...and the corrupted value itself appears nowhere in the log — the error
+  // record names only the path.
+  assert.ok(!log.content.includes('9223372036854776000'));
+  // ...and the stream stays alive: the next safe record still lands.
+  assert.ok(log.content.includes('"components":["A"]'), 'loop continues after the error record');
+  assert.ok(log.content.includes('WATCH_ENDED'));
+  assert.deepEqual(manager.list(), []);
+
+  // Unit level: the unsafe line parses to the unsafe outcome, not ok/junk.
+  const parsed = parseSseDataLine(unsafeLine);
+  assert.equal(parsed.ok, false);
+  assert.ok('unsafe' in parsed && parsed.unsafe);
+});
+
+test('safe large integers in SSE records are unaffected by the guard', async () => {
+  const logStore = makeLogStore();
+  const fake = fakeStreamBrp();
+  const manager = new WatchManager(logStore, fake.brp);
+  const watch = await manager.startListComponents(7);
+
+  fake.send(`data: {"jsonrpc":"2.0","id":1,"result":{"count":${2 ** 40},"scale":2.5}}\n`);
+  fake.close();
+
+  await until(async () => {
+    const log = await logStore.read(watch.filename);
+    return log.content.includes('WATCH_ENDED');
+  }, 'the watch to end');
+
+  const log = await logStore.read(watch.filename);
+  assert.ok(!log.content.includes('ERROR'), 'safe values raise no error');
+  assert.ok(log.content.includes(`"count":${2 ** 40}`));
+  assert.ok(log.content.includes('"scale":2.5'));
+});
+
 test('get watch uses world.get_components+watch, registers id 1, logs WATCH_STARTED', async () => {
   const logStore = makeLogStore();
   const fake = fakeStreamBrp();

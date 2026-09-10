@@ -186,6 +186,44 @@ test('waitForExit resolves within the timeout only when the child exits', async 
   assert.equal(exited, true);
 });
 
+test('waitForExit clears the losing timer so it cannot delay exit', async () => {
+  const { spawnImpl, calls } = fakeSpawnHarness();
+  const manager = new ProcessManager(spawnImpl, 60_000);
+  const tracked = manager.launch(LAUNCH);
+
+  // The child wins the race against a 60s bounded-wait timer.
+  const pending = manager.waitForExit(tracked, 60_000);
+  calls[0]!.child.exit(0, null);
+  assert.equal(await pending, true);
+
+  // One macrotask for the clear to land, then no live Timeout handle may
+  // remain: otherwise a losing grace timer would keep the process alive.
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  const liveTimers = (process as unknown as {
+    _getActiveHandles(): object[];
+  })._getActiveHandles().filter((handle) => {
+    const timeout = handle as { constructor?: { name?: string }; _destroyed?: boolean };
+    return timeout.constructor?.name === 'Timeout' && timeout._destroyed !== true;
+  });
+  assert.deepEqual(liveTimers, []);
+});
+
+test('shutdownAll terminates a real spawned child (SIGTERM reaches the process)', async () => {
+  const manager = new ProcessManager(); // real nodeSpawn
+  const tracked = manager.launch({
+    appName: 'real-child',
+    executable: process.execPath,
+    args: ['-e', 'process.on("SIGTERM", () => process.exit(0)); setInterval(() => {}, 1000);'],
+    port: 15702,
+    logPath: join(BASE, 'real-child.log'),
+  });
+  assert.equal(tracked.isAlive(), true);
+
+  await manager.shutdownAll();
+  await tracked.exited;
+  assert.equal(tracked.isAlive(), false, 'the real child was terminated');
+});
+
 test('shutdownAll terminates every tracked child and is idempotent', async () => {
   const { spawnImpl, calls } = fakeSpawnHarness({ diesOnSigterm: true });
   const manager = new ProcessManager(spawnImpl, 20);
