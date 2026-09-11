@@ -266,6 +266,9 @@ test('exact-name mode resolves one unique match and sends only the resolved enti
     mcp_tool: 'brp_extras_screenshot',
     brp_method: 'brp_extras/screenshot',
   });
+  // Upstream's resolved screenshot scope reports BOTH the canonical entity
+  // ID and the requested name.
+  assert.deepEqual(env.metadata, { entity: 4294966880, name: 'NatesList' });
 });
 
 test('entity and name together are rejected without any BRP call', async () => {

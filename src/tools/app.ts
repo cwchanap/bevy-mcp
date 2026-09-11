@@ -91,25 +91,15 @@ async function dirUsesBrpPlugins(dir: string, depth = 0): Promise<boolean> {
   return false;
 }
 
-/** Source file whose imports decide `brp_level`, mirroring cargo `src_path`
- * conventions for the common layouts (cargo metadata src_path is not carried
- * through CargoRuntime). */
-function sourceFileFor(target: BevyTarget): string {
-  if (target.kind === 'example') {
-    return join(target.packageRoot, 'examples', `${target.name}.rs`);
-  }
-  const main = join(target.packageRoot, 'src', 'main.rs');
-  if (existsSync(main)) return main;
-  return join(target.packageRoot, 'src', 'bin', `${target.name}.rs`);
-}
-
 async function brpLevelFor(target: BevyTarget): Promise<BrpLevel> {
   // Upstream hybrid: bins report a level only if their package's src/ tree
-  // uses BRP plugins; the concrete level comes from the target source file.
+  // uses BRP plugins; the concrete level comes from the target source file —
+  // cargo metadata's own `src_path`, so custom `[[bin]] path` /
+  // `[[example]] path` layouts resolve correctly.
   if (target.kind === 'app' && !(await dirUsesBrpPlugins(join(target.packageRoot, 'src')))) {
     return 'none';
   }
-  return fileBrpLevel(sourceFileFor(target));
+  return fileBrpLevel(target.srcPath);
 }
 
 /**

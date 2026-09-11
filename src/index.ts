@@ -1,41 +1,35 @@
 #!/usr/bin/env node
 import { StdioServerTransport } from '@modelcontextprotocol/server/stdio';
+import { createCleanup, exitAfterCleanup } from './cleanup.js';
 import { createOwnedServer } from './server.js';
 
 export async function main(): Promise<void> {
   const { server, services } = createOwnedServer();
 
-  // Contractual cleanup order (CLAUDE.md): watches -> processes -> server.
-  // Idempotent: EOF, signals, and explicit closes share ONE in-flight run —
-  // every caller awaits the same promise, so a signal arriving during an
-  // EOF-triggered cleanup still waits for it to finish before exiting.
-  // Never rejects: failures go to stderr, never surface as unhandled
-  // rejections (the signal paths exit explicitly right after).
-  let cleanupPromise: Promise<void> | undefined;
-  const cleanup = (): Promise<void> => {
-    cleanupPromise ??= (async () => {
-      try {
-        await services.watches.stopAll();
-        await services.processes.shutdownAll();
-        await server.close();
-      } catch (error) {
-        console.error(error);
-      }
-    })();
-    return cleanupPromise;
-  };
+  // Contractual cleanup order (AGENTS.md): watches -> processes -> server.
+  // Idempotent via the shared in-flight run. A rejected cleanup means a
+  // tracked child survived termination — the explicit process.exit paths
+  // below are skipped in that case so the child is not orphaned.
+  const cleanup = createCleanup({
+    stopWatches: () => services.watches.stopAll(),
+    shutdownProcesses: () => services.processes.shutdownAll(),
+    closeServer: () => server.close(),
+  });
 
   // StdioServerTransport does not watch for stdin EOF itself; on EOF run the
   // cleanup chain and let the event loop drain so the process exits cleanly.
+  // A surviving tracked child keeps the loop (and this process) alive.
   process.stdin.on('end', () => {
-    void cleanup();
+    void cleanup().catch(() => {});
   });
 
   // Signals bypass the stdin EOF path: run the SAME ordered cleanup, then
-  // exit with the conventional 128+signal code.
+  // exit with the conventional 128+signal code — only when cleanup actually
+  // succeeded (a failed child shutdown leaves the child tracked, so the
+  // process stays up rather than orphaning it).
   const exitOnSignal = (signal: NodeJS.Signals, code: number): void => {
     process.once(signal, () => {
-      void cleanup().then(() => process.exit(code));
+      exitAfterCleanup(cleanup, code, (exitCode) => process.exit(exitCode));
     });
   };
   exitOnSignal('SIGINT', 130);

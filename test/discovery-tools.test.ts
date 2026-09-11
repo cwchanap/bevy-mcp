@@ -296,6 +296,42 @@ test('brp_execute rejects a method missing from discovery with available methods
   assert.equal('result' in env, false);
 });
 
+test('brp_execute rejects malformed rpc.discover documents as decode failures', async () => {
+  for (const document of [
+    { methods: 'invalid' },
+    { methods: [{ name: 'world.query' }, 'bogus-entry'] },
+    { methods: [{ name: 'world.query' }, { name: 7 }] },
+    { methods: [{ name: 'world.query' }, { params: [] }] },
+    'raw-string',
+    null,
+  ]) {
+    const { fake, call } = setup();
+    fake.responses.set('rpc.discover', document);
+    const result = await call('brp_execute', { method: 'world.query' });
+    const env = envelope(result);
+
+    assert.equal(env.status, 'error', JSON.stringify(document));
+    assert.equal(result.isError, true);
+    assert.equal(env.message, 'Unable to decode rpc.discover response from port 15702');
+    assert.equal((env.metadata as Record<string, unknown>).stage, 'discovery');
+    assert.equal((env.metadata as Record<string, unknown>).port, DEFAULT_BRP_PORT);
+    assert.equal(fake.calls.length, 1, 'decode failure must not invoke the method');
+  }
+});
+
+test('brp_execute rejects empty method names in the discover document', async () => {
+  const { fake, call } = setup();
+  fake.responses.set('rpc.discover', {
+    methods: [{ name: 'world.query' }, { name: '' }],
+  });
+  const env = envelope(await call('brp_execute', { method: 'world.query' }));
+
+  assert.equal(env.status, 'error');
+  assert.equal(env.message, 'Unable to decode rpc.discover response from port 15702');
+  assert.match(String((env.metadata as Record<string, unknown>).error), /empty method name/);
+  assert.equal(fake.calls.length, 1);
+});
+
 test('brp_execute reports discovery transport failures with stage metadata', async () => {
   const { fake, call } = setup();
   fake.errors.set('rpc.discover', new BrpError('BRP endpoint unreachable'));
