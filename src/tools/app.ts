@@ -355,9 +355,20 @@ export function launchHandler(services: BevyMcpServices): OwnedToolHandler {
       } catch (error) {
         // A partial launch must not leave already-spawned instances running:
         // terminate every child this request started before reporting failure.
-        await Promise.allSettled(
+        const results = await Promise.allSettled(
           started.map((child) => services.processes.terminate(child)),
         );
+        // A rejected termination means that child may still be alive; the
+        // reported launch error must name those PIDs so none are orphaned
+        // silently.
+        const surviving = started.filter((_, index) => results[index]!.status === 'rejected');
+        if (surviving.length > 0) {
+          const pids = surviving.map((child) => child.pid).join(', ');
+          const cause = error instanceof Error ? error.message : String(error);
+          throw new Error(
+            `${cause} (rollback incomplete: child pid(s) ${pids} may still be running)`,
+          );
+        }
         throw error;
       }
 

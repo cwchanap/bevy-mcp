@@ -99,8 +99,14 @@ class FakeProcesses implements ProcessService {
   terminated: TrackedProcess[] = [];
   /** Controls the graceful-shutdown wait: true = exited within the window. */
   waitResult = true;
+  /** Launch calls at these 0-based indexes throw instead of spawning. */
+  launchErrors = new Map<number, Error>();
+  /** When set, terminate rejects and the child stays tracked and alive. */
+  terminateError: Error | null = null;
 
   launch(spec: LaunchSpec): TrackedProcess {
+    const launchError = this.launchErrors.get(this.launches.length);
+    if (launchError !== undefined) throw launchError;
     const entry = { ...spec, alive: true } as FakeLaunch;
     entry.process = {
       appName: spec.appName,
@@ -126,6 +132,7 @@ class FakeProcesses implements ProcessService {
 
   async terminate(process: TrackedProcess): Promise<void> {
     this.terminated.push(process);
+    if (this.terminateError !== null) throw this.terminateError;
     // Match ProcessManager's exit behavior: a terminated child leaves the
     // tracked set and reports not-alive.
     const entry = this.launches.find((candidate) => candidate.process === process);
@@ -411,6 +418,49 @@ test('brp_launch runs ONE cargo build and spawns instance_count children on cons
   assert.equal(new Set(logFiles).size, 3, 'each instance gets its own log file');
   const listed = await logStore.list({ appName: 'fixture' });
   assert.equal(listed.length, 3);
+});
+
+test('brp_launch rolls back started children when a later launch fails', async () => {
+  const { call, processes } = harness();
+  processes.launchErrors.set(1, new Error('spawn denied'));
+
+  const env = envelope(
+    await call('brp_launch', {
+      target_name: 'fixture',
+      path: BASE,
+      port: 15702,
+      instance_count: 2,
+    }),
+  );
+
+  assert.equal(env.status, 'error');
+  assert.equal(env.message, 'spawn denied');
+  assert.deepEqual(
+    processes.terminated.map((process) => process.pid),
+    [5001],
+    'the already-started child is terminated',
+  );
+});
+
+test('brp_launch names possibly-live pids when rollback termination fails', async () => {
+  const { call, processes } = harness();
+  processes.launchErrors.set(1, new Error('spawn denied'));
+  processes.terminateError = new Error('child ignored SIGKILL');
+
+  const env = envelope(
+    await call('brp_launch', {
+      target_name: 'fixture',
+      path: BASE,
+      port: 15702,
+      instance_count: 2,
+    }),
+  );
+
+  assert.equal(env.status, 'error');
+  assert.match(env.message, /spawn denied/);
+  assert.match(env.message, /5001/, 'the surviving child pid is reported');
+  assert.match(env.message, /may still be running/);
+  assert.deepEqual(processes.terminated.map((process) => process.pid), [5001]);
 });
 
 test('brp_status combines tracked state with the rpc.discover readiness probe', async () => {
