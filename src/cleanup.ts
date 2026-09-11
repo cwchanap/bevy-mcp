@@ -21,6 +21,11 @@ export interface ShutdownSteps {
  * sequence stays tracked in the ProcessManager, and the rejected cleanup
  * tells callers the process is NOT clean to exit. Failures are logged to
  * stderr here so rejection handlers never re-log or re-surface them.
+ *
+ * Only the IN-FLIGHT attempt is shared: a rejected run clears the cache so a
+ * later signal retries `shutdownAll` — the process is still up precisely
+ * because a tracked child survived. A resolved run stays cached (idempotent
+ * success).
  */
 export function createCleanup(steps: ShutdownSteps): () => Promise<void> {
   let cleanupPromise: Promise<void> | undefined;
@@ -43,7 +48,10 @@ export function createCleanup(steps: ShutdownSteps): () => Promise<void> {
           }
         }
       }
-      if (failed) throw firstFailure;
+      if (failed) {
+        cleanupPromise = undefined;
+        throw firstFailure;
+      }
     })();
     return cleanupPromise;
   };
