@@ -54,6 +54,7 @@ export function screenshotHandler(services: BevyMcpServices): OwnedToolHandler {
     }
 
     let params: Record<string, unknown> = {};
+    let resolvedEntity: unknown;
     if (typeof name === 'string') {
       let matches: { entity: number; name: string }[];
       try {
@@ -74,8 +75,10 @@ export function screenshotHandler(services: BevyMcpServices): OwnedToolHandler {
             'use world_find_entities_by_name to inspect the duplicates and pick an entity ID',
         );
       }
-      params.entity = matches[0]!.entity;
+      resolvedEntity = matches[0]!.entity;
+      params.entity = resolvedEntity;
     } else if (entity !== undefined) {
+      resolvedEntity = entity;
       params.entity = entity;
     }
     if (camera !== undefined) params.camera = camera;
@@ -84,9 +87,10 @@ export function screenshotHandler(services: BevyMcpServices): OwnedToolHandler {
 
     try {
       const result = await services.brp.call(SCREENSHOT_METHOD, params, { port });
-      // Upstream metadata: selector entity/name, each skipped when absent.
+      // Upstream metadata: the RESOLVED selector entity (the canonical ID
+      // after name resolution) and name, each skipped when absent.
       const metadata = {
-        ...(entity !== undefined ? { entity } : {}),
+        ...(resolvedEntity !== undefined ? { entity: resolvedEntity } : {}),
         ...(typeof name === 'string' ? { name } : {}),
       };
       return toolSuccess(callInfo, `Screenshot saved to ${String(path)}`, {

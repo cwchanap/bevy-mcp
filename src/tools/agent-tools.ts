@@ -5,13 +5,29 @@ import type { BevyMcpServices } from '../services.js';
 import { brpErrorInfo, toolError, toolSuccess } from './response.js';
 import type { OwnedToolHandler } from './register.js';
 
-/** Method names from an OpenRPC-style `rpc.discover` document. */
+/** Method names from an OpenRPC-style `rpc.discover` document. Mirrors
+ * upstream's `OpenRpcDocument` decode: a document that is not an object
+ * carrying a `methods` array, an entry without a string `name`, or an empty
+ * method name is a decode failure — never an empty catalog (which would
+ * misreport the requested method as unregistered). */
 function discoveredMethods(document: unknown): string[] {
-  const methods = (document as { methods?: unknown })?.methods;
-  if (!Array.isArray(methods)) return [];
-  return methods
-    .map((entry) => (entry as { name?: unknown })?.name)
-    .filter((name): name is string => typeof name === 'string');
+  const methods =
+    document !== null && typeof document === 'object' && !Array.isArray(document)
+      ? (document as { methods?: unknown }).methods
+      : undefined;
+  if (!Array.isArray(methods)) {
+    throw new Error('rpc.discover document is not an object with a methods array');
+  }
+  return methods.map((entry, index) => {
+    const name = (entry as { name?: unknown })?.name;
+    if (typeof name !== 'string') {
+      throw new Error(`rpc.discover method entry ${index} has no string name`);
+    }
+    if (name === '') {
+      throw new Error('rpc.discover returned an empty method name');
+    }
+    return name;
+  });
 }
 
 /**
@@ -29,7 +45,21 @@ export function executeHandler(services: BevyMcpServices): OwnedToolHandler {
     try {
       available = discoveredMethods(await services.brp.discover(port));
     } catch (error) {
-      if (!(error instanceof BrpError)) throw error;
+      if (!(error instanceof BrpError)) {
+        // A validation throw is the OpenRpcDocument decode failure upstream
+        // reports — same `stage: 'discovery'` metadata, different message.
+        return toolError(
+          callInfo,
+          `Unable to decode rpc.discover response from port ${port}`,
+          {
+            metadata: {
+              stage: 'discovery',
+              port,
+              error: error instanceof Error ? error.message : String(error),
+            },
+          },
+        );
+      }
       return toolError(callInfo, `Failed to discover BRP methods on port ${port}`, {
         metadata: { stage: 'discovery', port, error: error.message },
       });

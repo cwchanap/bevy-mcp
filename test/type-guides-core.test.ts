@@ -235,7 +235,7 @@ test('arrays replicate the element example per inferred size', () => {
   ]);
 });
 
-test('pathological array sizes fall back to the default example length', () => {
+test('array examples materialize the full declared size (0.22.3 parity)', () => {
   const registry = makeRegistry({
     '[u8; 100000]': {
       typePath: '[u8; 100000]',
@@ -243,11 +243,36 @@ test('pathological array sizes fall back to the default example length', () => {
       type: 'array',
       items: { type: { $ref: '#/$defs/u8' } },
     },
+    '[u8; 2048]': {
+      typePath: '[u8; 2048]',
+      kind: 'Array',
+      type: 'array',
+      items: { type: { $ref: '#/$defs/u8' } },
+    },
   });
-  // Both array example paths must cap the materialized length, not allocate
-  // 100k elements for the declared size.
-  assert.deepEqual(exampleOf(registry, '[u8; 100000]'), [128, 128]);
+  // Upstream parses `usize` and materializes the full valid length — no
+  // application-level maximum.
+  assert.equal((exampleOf(registry, '[u8; 2048]') as unknown[]).length, 2048);
+  assert.equal((exampleOf(registry, '[u8; 100000]') as unknown[]).length, 100000);
   const rootPath = buildMutationPaths('[u8; 100000]', registry).find((p) => p.path === '');
+  assert.equal((rootPath?.example as unknown[]).length, 100000);
+});
+
+test('array sizes that overflow usize fall back to the default example length', () => {
+  // Past the safe-integer bound the digits no longer round-trip exactly —
+  // the JS equivalent of upstream's `usize` parse failure.
+  const registry = makeRegistry({
+    '[u8; 9007199254740993]': {
+      typePath: '[u8; 9007199254740993]',
+      kind: 'Array',
+      type: 'array',
+      items: { type: { $ref: '#/$defs/u8' } },
+    },
+  });
+  assert.deepEqual(exampleOf(registry, '[u8; 9007199254740993]'), [128, 128]);
+  const rootPath = buildMutationPaths('[u8; 9007199254740993]', registry).find(
+    (p) => p.path === '',
+  );
   assert.deepEqual(rootPath?.example, [128, 128]);
 });
 

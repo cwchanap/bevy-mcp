@@ -12,26 +12,37 @@ const FIXTURE_METADATA = JSON.stringify({
     {
       name: 'zeta-app',
       manifest_path: '/ws/zeta/Cargo.toml',
+      dependencies: [{ name: 'bevy' }],
       targets: [
-        { name: 'zeta-app', kind: ['bin'] },
-        { name: 'unused-lib', kind: ['lib'] },
+        { name: 'zeta-app', kind: ['bin'], src_path: '/ws/zeta/src/main.rs' },
+        { name: 'unused-lib', kind: ['lib'], src_path: '/ws/zeta/src/lib.rs' },
       ],
     },
     {
       name: 'alpha-pkg',
       manifest_path: '/ws/alpha/Cargo.toml',
+      dependencies: [{ name: 'bevy' }],
       targets: [
         // Duplicate target name across packages, plus same-name bin+example.
-        { name: 'alpha-pkg', kind: ['bin'] },
-        { name: 'demo', kind: ['example'] },
-        { name: 'shared', kind: ['bin'] },
-        { name: 'shared', kind: ['example'] },
+        { name: 'alpha-pkg', kind: ['bin'], src_path: '/ws/alpha/src/main.rs' },
+        { name: 'demo', kind: ['example'], src_path: '/ws/alpha/examples/demo.rs' },
+        { name: 'shared', kind: ['bin'], src_path: '/ws/alpha/src/bin/shared.rs' },
+        { name: 'shared', kind: ['example'], src_path: '/ws/alpha/examples/shared.rs' },
       ],
     },
     {
       name: 'beta-pkg',
       manifest_path: '/ws/beta/Cargo.toml',
-      targets: [{ name: 'shared', kind: ['bin'] }],
+      dependencies: [{ name: 'bevy' }],
+      targets: [{ name: 'shared', kind: ['bin'], src_path: '/ws/beta/src/bin/shared.rs' }],
+    },
+    {
+      // A workspace member without a `bevy` dependency is not a Bevy app —
+      // its bins must never surface (upstream bevy_app_filter).
+      name: 'util-pkg',
+      manifest_path: '/ws/util/Cargo.toml',
+      dependencies: [{ name: 'serde' }],
+      targets: [{ name: 'util-cli', kind: ['bin'], src_path: '/ws/util/src/main.rs' }],
     },
   ],
 });
@@ -41,6 +52,7 @@ const expectedTarget = (
   kind: 'app' | 'example',
   packageName: string,
   manifestPath: string,
+  srcPath: string,
 ): BevyTarget => ({
   name,
   kind,
@@ -48,17 +60,51 @@ const expectedTarget = (
   manifestPath,
   workspaceRoot: '',
   packageRoot: manifestPath.slice(0, manifestPath.lastIndexOf('/')),
+  srcPath,
 });
 
-test('metadata normalization keeps only executable targets and maps kinds', () => {
+test('metadata normalization keeps only executable targets of Bevy packages and maps kinds', () => {
   const targets = normalizeCargoMetadata(FIXTURE_METADATA);
   assert.deepEqual(targets, [
-    expectedTarget('alpha-pkg', 'app', 'alpha-pkg', '/ws/alpha/Cargo.toml'),
-    expectedTarget('demo', 'example', 'alpha-pkg', '/ws/alpha/Cargo.toml'),
-    expectedTarget('shared', 'app', 'alpha-pkg', '/ws/alpha/Cargo.toml'),
-    expectedTarget('shared', 'example', 'alpha-pkg', '/ws/alpha/Cargo.toml'),
-    expectedTarget('shared', 'app', 'beta-pkg', '/ws/beta/Cargo.toml'),
-    expectedTarget('zeta-app', 'app', 'zeta-app', '/ws/zeta/Cargo.toml'),
+    expectedTarget('alpha-pkg', 'app', 'alpha-pkg', '/ws/alpha/Cargo.toml', '/ws/alpha/src/main.rs'),
+    expectedTarget('demo', 'example', 'alpha-pkg', '/ws/alpha/Cargo.toml', '/ws/alpha/examples/demo.rs'),
+    expectedTarget('shared', 'app', 'alpha-pkg', '/ws/alpha/Cargo.toml', '/ws/alpha/src/bin/shared.rs'),
+    expectedTarget('shared', 'example', 'alpha-pkg', '/ws/alpha/Cargo.toml', '/ws/alpha/examples/shared.rs'),
+    expectedTarget('shared', 'app', 'beta-pkg', '/ws/beta/Cargo.toml', '/ws/beta/src/bin/shared.rs'),
+    expectedTarget('zeta-app', 'app', 'zeta-app', '/ws/zeta/Cargo.toml', '/ws/zeta/src/main.rs'),
+  ]);
+});
+
+test('metadata normalization filters non-Bevy workspace members and bevy_brp_mcp itself', () => {
+  const metadata = JSON.stringify({
+    packages: [
+      {
+        name: 'util-pkg',
+        manifest_path: '/ws/util/Cargo.toml',
+        dependencies: [{ name: 'serde' }],
+        targets: [{ name: 'util-cli', kind: ['bin'], src_path: '/ws/util/src/main.rs' }],
+      },
+      {
+        name: 'no-deps-member',
+        manifest_path: '/ws/nd/Cargo.toml',
+        targets: [{ name: 'nd-cli', kind: ['bin'], src_path: '/ws/nd/src/main.rs' }],
+      },
+      {
+        name: 'bevy_brp_mcp',
+        manifest_path: '/ws/mcp/Cargo.toml',
+        dependencies: [{ name: 'bevy' }],
+        targets: [{ name: 'bevy_brp_mcp', kind: ['bin'], src_path: '/ws/mcp/src/main.rs' }],
+      },
+      {
+        // The bevy crate itself is included (its examples are discoverable).
+        name: 'bevy',
+        manifest_path: '/ws/bevy/Cargo.toml',
+        targets: [{ name: 'breakout', kind: ['example'], src_path: '/ws/bevy/examples/breakout.rs' }],
+      },
+    ],
+  });
+  assert.deepEqual(normalizeCargoMetadata(metadata), [
+    expectedTarget('breakout', 'example', 'bevy', '/ws/bevy/Cargo.toml', '/ws/bevy/examples/breakout.rs'),
   ]);
 });
 
@@ -145,7 +191,7 @@ test('build passes scoped args, release flag only when requested, cwd = package 
   ].join('\n');
   const { runner, calls } = makeFakeRunner([BUILD_OUTPUT, appBuildOutput]);
   const cargo = new CargoRuntime(runner);
-  const target = expectedTarget('demo', 'example', 'alpha-pkg', '/ws/alpha/Cargo.toml');
+  const target = expectedTarget('demo', 'example', 'alpha-pkg', '/ws/alpha/Cargo.toml', '/ws/alpha/examples/demo.rs');
 
   const debug = await cargo.build(target, 'debug');
   assert.equal(debug.executable, '/ws/target/debug/examples/demo');
@@ -159,7 +205,7 @@ test('build passes scoped args, release flag only when requested, cwd = package 
   ]);
   assert.equal(calls[0].cwd, '/ws/alpha');
 
-  const app = expectedTarget('alpha-pkg', 'app', 'alpha-pkg', '/ws/alpha/Cargo.toml');
+  const app = expectedTarget('alpha-pkg', 'app', 'alpha-pkg', '/ws/alpha/Cargo.toml', '/ws/alpha/src/main.rs');
   const release = await cargo.build(app, 'release');
   assert.equal(release.executable, '/ws/target/release/alpha-pkg');
   assert.deepEqual(calls[1].args, [
@@ -177,7 +223,7 @@ test('build propagates cargo failures', async () => {
   const { runner } = makeFakeRunner(new Error('exit code 101'));
   const cargo = new CargoRuntime(runner);
   await assert.rejects(
-    cargo.build(expectedTarget('demo', 'example', 'alpha-pkg', '/ws/alpha/Cargo.toml'), 'debug'),
+    cargo.build(expectedTarget('demo', 'example', 'alpha-pkg', '/ws/alpha/Cargo.toml', '/ws/alpha/examples/demo.rs'), 'debug'),
     /exit code 101/,
   );
 });

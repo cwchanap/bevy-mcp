@@ -23,6 +23,10 @@ export interface BevyTarget {
   packageName: string;
   manifestPath: string;
   packageRoot: string;
+  /** The target's own source file from cargo metadata `src_path` — custom
+   * `[[bin]] path` / `[[example]] path` layouts included (upstream
+   * `BevyTarget.source`, MIT). */
+  srcPath: string;
   /** Cargo workspace root containing the target (upstream launch metadata). */
   workspaceRoot: string;
 }
@@ -47,7 +51,10 @@ const defaultRunner: CargoRunner = (file, args, options) =>
 interface CargoMetadataPackage {
   name: string;
   manifest_path: string;
-  targets: { name: string; kind: string[] }[];
+  /** `dependencies` stays populated under `--no-deps` (only the resolve
+   * graph is omitted). */
+  dependencies?: { name?: string }[];
+  targets: { name: string; kind: string[]; src_path: string }[];
 }
 
 interface CargoMetadata {
@@ -69,15 +76,33 @@ function resolveManifestDir(root: string): string {
   return basename(resolved) === 'Cargo.toml' ? dirname(resolved) : resolved;
 }
 
+/** Upstream crate-name constants (`app_tools/targets/constants.rs`, MIT). */
+const BEVY_CRATE_NAME = 'bevy';
+const MCP_CRATE_NAME = 'bevy_brp_mcp';
+
+/** Upstream `bevy_app_filter` (MIT): the `bevy` package itself — its examples
+ * are discoverable — or any package with a direct `bevy` dependency. The
+ * `bevy_brp_mcp` package itself is always excluded. With `--no-deps` the
+ * package list is already scoped to workspace members, but not every member
+ * is a Bevy app — this filter is what keeps unrelated utility binaries out
+ * of `brp_list_bevy`/`brp_launch`. */
+function isBevyPackage(pkg: CargoMetadataPackage): boolean {
+  return (
+    pkg.name !== MCP_CRATE_NAME &&
+    (pkg.name === BEVY_CRATE_NAME ||
+      (pkg.dependencies ?? []).some((dep) => dep.name === BEVY_CRATE_NAME))
+  );
+}
+
 /** Normalize `cargo metadata --format-version 1 --no-deps` output into
- * executable targets (bins → `app`, examples → `example`), sorted by name,
- * then package, then kind. With `--no-deps` the package list is already
- * scoped to workspace members. */
+ * executable targets (bins → `app`, examples → `example`) of Bevy packages
+ * only, sorted by name, then package, then kind. */
 export function normalizeCargoMetadata(stdout: string): BevyTarget[] {
   const metadata = JSON.parse(stdout) as CargoMetadata;
   const workspaceRoot = metadata.workspace_root ?? '';
   const targets: BevyTarget[] = [];
   for (const pkg of metadata.packages ?? []) {
+    if (!isBevyPackage(pkg)) continue;
     for (const target of pkg.targets) {
       const kind = target.kind.includes('bin')
         ? ('app' as const)
@@ -92,6 +117,7 @@ export function normalizeCargoMetadata(stdout: string): BevyTarget[] {
         packageName: pkg.name,
         manifestPath,
         packageRoot: dirname(manifestPath),
+        srcPath: target.src_path,
         workspaceRoot,
       });
     }

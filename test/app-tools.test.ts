@@ -22,11 +22,14 @@ const BASE = mkdtempSync(join(tmpdir(), 'bevy-mcp-app-tools-'));
 const PKG_A = join(BASE, 'pkg_a');
 const PKG_B = join(BASE, 'pkg_b');
 
-mkdirSync(join(PKG_A, 'src'), { recursive: true });
+mkdirSync(join(PKG_A, 'src', 'bin'), { recursive: true });
 mkdirSync(join(PKG_B, 'src'), { recursive: true });
 mkdirSync(join(PKG_B, 'examples'), { recursive: true });
 // pkg_a's src tree registers BrpExtrasPlugin -> 'extras' level.
 writeFileSync(join(PKG_A, 'src', 'main.rs'), 'use bevy_brp_extras::BrpExtrasPlugin;\n');
+// pkg_a's secondary bins have their own src_path files (custom layout).
+writeFileSync(join(PKG_A, 'src', 'bin', 'both.rs'), 'use bevy_remote::RemotePlugin;\n');
+writeFileSync(join(PKG_A, 'src', 'bin', 'dup.rs'), 'fn main() {}\n');
 writeFileSync(join(PKG_B, 'src', 'main.rs'), 'fn main() {}\n');
 // pkg_b's demo example imports RemotePlugin only -> 'brp_only' level.
 writeFileSync(join(PKG_B, 'examples', 'demo.rs'), 'use bevy::remote::RemotePlugin;\n');
@@ -37,19 +40,31 @@ const METADATA = {
     {
       name: 'pkg_a',
       manifest_path: join(PKG_A, 'Cargo.toml'),
+      dependencies: [{ name: 'bevy' }],
       targets: [
-        { name: 'fixture', kind: ['bin'] },
-        { name: 'both', kind: ['bin'] },
-        { name: 'dup', kind: ['bin'] },
+        { name: 'fixture', kind: ['bin'], src_path: join(PKG_A, 'src', 'main.rs') },
+        { name: 'both', kind: ['bin'], src_path: join(PKG_A, 'src', 'bin', 'both.rs') },
+        { name: 'dup', kind: ['bin'], src_path: join(PKG_A, 'src', 'bin', 'dup.rs') },
       ],
     },
     {
       name: 'pkg_b',
       manifest_path: join(PKG_B, 'Cargo.toml'),
+      dependencies: [{ name: 'bevy' }],
       targets: [
-        { name: 'dup', kind: ['bin'] },
-        { name: 'demo', kind: ['example'] },
-        { name: 'both', kind: ['example'] },
+        { name: 'dup', kind: ['bin'], src_path: join(PKG_B, 'src', 'main.rs') },
+        { name: 'demo', kind: ['example'], src_path: join(PKG_B, 'examples', 'demo.rs') },
+        { name: 'both', kind: ['example'], src_path: join(PKG_B, 'examples', 'both.rs') },
+      ],
+    },
+    {
+      // A workspace member without a `bevy` dependency is not a Bevy app —
+      // upstream bevy_app_filter keeps it out of the listing entirely.
+      name: 'util_pkg',
+      manifest_path: join(BASE, 'util_pkg', 'Cargo.toml'),
+      dependencies: [{ name: 'serde' }],
+      targets: [
+        { name: 'util-cli', kind: ['bin'], src_path: join(BASE, 'util_pkg', 'src', 'main.rs') },
       ],
     },
   ],
@@ -244,6 +259,11 @@ test('brp_list_bevy returns cargo-metadata targets with kind and brp_level', asy
   assert.equal(levels['fixture@pkg_a'], 'extras', 'BrpExtrasPlugin import detected');
   assert.equal(levels['demo@pkg_b'], 'brp_only', 'RemotePlugin-only import detected');
   assert.equal(levels['dup@pkg_b'], 'none', 'no BRP imports detected');
+  // The level comes from each target's own cargo src_path, not a shared
+  // guess: pkg_a's secondary bins do not read src/main.rs.
+  assert.equal(levels['both@pkg_a'], 'brp_only', 'custom src_path file inspected');
+  assert.equal(levels['dup@pkg_a'], 'none', 'custom src_path file inspected');
+  assert.equal(levels['util-cli@util_pkg'], undefined, 'non-Bevy package filtered out');
   for (const item of items) {
     assert.ok(item.manifest_path.endsWith('Cargo.toml'));
     assert.equal(typeof item.relative_path, 'string');
