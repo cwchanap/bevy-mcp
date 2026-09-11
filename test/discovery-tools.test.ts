@@ -98,6 +98,27 @@ function setup(
 
 const FIND = 'world_find_entities_by_name';
 
+/** Minimal VALID rpc.discover document — upstream's typed OpenRpcDocument
+ * decode (bevy_remote 0.19.1) requires `openrpc`, `info.title`/`info.version`,
+ * and `methods`, and type-checks `params`/`servers` when present. */
+const discoverDoc = (methods: unknown[]): Record<string, unknown> => ({
+  openrpc: '1.3.2',
+  info: { title: 'Bevy Remote Protocol', version: '0.19.1' },
+  methods,
+});
+
+/** A well-formed MethodObject param (`Parameter`: name + JsonSchemaBevyType
+ * `schema` with required shortPath/typePath/kind/type). */
+const VALID_PARAM = {
+  name: 'entity',
+  schema: {
+    shortPath: 'Entity',
+    typePath: 'bevy_ecs::entity::Entity',
+    kind: 'Value',
+    type: 'uint',
+  },
+};
+
 test('registerDiscoveryTools registers exactly the three composite tools', () => {
   const server = new McpServer({ name: 't', version: '0.0.0' });
   registerDiscoveryTools(server, fakeServices(new FakeBrpClient()), loadToolContractCatalog());
@@ -249,10 +270,10 @@ test('find-by-name converts BRP failures into an Internal error envelope', async
 
 test('brp_execute validates discovery then passes the method through', async () => {
   const { fake, call } = setup();
-  fake.responses.set('rpc.discover', {
-    openrpc: '1.3.2',
-    methods: [{ name: 'world.query' }, { name: 'bevy_mcp/world_stats' }],
-  });
+  fake.responses.set(
+    'rpc.discover',
+    discoverDoc([{ name: 'world.query', params: [] }, { name: 'bevy_mcp/world_stats', params: [VALID_PARAM] }]),
+  );
   fake.responses.set('bevy_mcp/world_stats', { returned: 1, truncated: true });
   const result = await call('brp_execute', {
     method: 'bevy_mcp/world_stats',
@@ -277,9 +298,10 @@ test('brp_execute validates discovery then passes the method through', async () 
 
 test('brp_execute rejects a method missing from discovery with available methods', async () => {
   const { fake, call } = setup();
-  fake.responses.set('rpc.discover', {
-    methods: [{ name: 'world.query' }, { name: 'bevy_mcp/world_stats' }],
-  });
+  fake.responses.set(
+    'rpc.discover',
+    discoverDoc([{ name: 'world.query' }, { name: 'bevy_mcp/world_stats' }]),
+  );
   const result = await call('brp_execute', { method: 'no/such/method' });
   const env = envelope(result);
 
@@ -297,6 +319,10 @@ test('brp_execute rejects a method missing from discovery with available methods
 });
 
 test('brp_execute rejects malformed rpc.discover documents as decode failures', async () => {
+  const fullDoc = (overrides: Record<string, unknown>): Record<string, unknown> => ({
+    ...discoverDoc([{ name: 'world.query' }]),
+    ...overrides,
+  });
   for (const document of [
     { methods: 'invalid' },
     { methods: [{ name: 'world.query' }, 'bogus-entry'] },
@@ -304,6 +330,32 @@ test('brp_execute rejects malformed rpc.discover documents as decode failures', 
     { methods: [{ name: 'world.query' }, { params: [] }] },
     'raw-string',
     null,
+    // Upstream's typed OpenRpcDocument decode requires openrpc/info/methods —
+    // each missing-or-misshaped field is a decode failure, not an empty list.
+    { openrpc: '1.3.2', methods: [{ name: 'world.query' }] }, // no info
+    { info: { title: 't', version: 'v' }, methods: [{ name: 'world.query' }] }, // no openrpc
+    fullDoc({ openrpc: 7 }),
+    fullDoc({ info: { version: '0.19.1' } }), // no title
+    fullDoc({ info: { title: 't' } }), // no version
+    fullDoc({ info: { title: 't', version: 'v', description: 42 } }),
+    fullDoc({ methods: null }),
+    // Method payloads are part of the typed decode when present.
+    discoverDoc([{ name: 'world.query', params: 'bogus' }]),
+    discoverDoc([{ name: 'world.query', params: null }]),
+    discoverDoc([{ name: 'world.query', params: [{}] }]), // no name/schema
+    discoverDoc([{ name: 'world.query', params: [{ name: 'p' }] }]), // no schema
+    discoverDoc([{ name: 'world.query', params: [{ name: 'p', schema: {} }] }]),
+    discoverDoc([
+      {
+        name: 'world.query',
+        params: [
+          { name: 'p', schema: { shortPath: 'P', typePath: 'p::P', kind: 'Bogus', type: 'uint' } },
+        ],
+      },
+    ]),
+    discoverDoc([{ name: 'world.query', summary: 42 }]),
+    fullDoc({ servers: 'bogus' }),
+    fullDoc({ servers: [{ name: 's' }] }), // no url
   ]) {
     const { fake, call } = setup();
     fake.responses.set('rpc.discover', document);
@@ -321,9 +373,10 @@ test('brp_execute rejects malformed rpc.discover documents as decode failures', 
 
 test('brp_execute rejects empty method names in the discover document', async () => {
   const { fake, call } = setup();
-  fake.responses.set('rpc.discover', {
-    methods: [{ name: 'world.query' }, { name: '' }],
-  });
+  fake.responses.set(
+    'rpc.discover',
+    discoverDoc([{ name: 'world.query' }, { name: '' }]),
+  );
   const env = envelope(await call('brp_execute', { method: 'world.query' }));
 
   assert.equal(env.status, 'error');
@@ -349,7 +402,7 @@ test('brp_execute reports discovery transport failures with stage metadata', asy
 
 test('brp_execute reports BRP invocation failures with execution metadata', async () => {
   const { fake, call } = setup();
-  fake.responses.set('rpc.discover', { methods: [{ name: 'world.get_components' }] });
+  fake.responses.set('rpc.discover', discoverDoc([{ name: 'world.get_components' }]));
   fake.errors.set(
     'world.get_components',
     new BrpJsonRpcError('world.get_components', -32602, 'bad entity', { detail: 'x' }),
@@ -371,7 +424,7 @@ test('brp_execute reports BRP invocation failures with execution metadata', asyn
 
 test('brp_execute wraps execution-stage transport failures in the error envelope', async () => {
   const { fake, call } = setup();
-  fake.responses.set('rpc.discover', { methods: [{ name: 'world.get_components' }] });
+  fake.responses.set('rpc.discover', discoverDoc([{ name: 'world.get_components' }]));
   fake.errors.set('world.get_components', new BrpError('connect ECONNREFUSED 127.0.0.1:15702'));
   const result = await call('brp_execute', { method: 'world.get_components' });
   const env = envelope(result);
@@ -391,7 +444,7 @@ test('brp_execute wraps execution-stage transport failures in the error envelope
 
 test('brp_execute omits params on the wire when the caller passes none', async () => {
   const { fake, call } = setup();
-  fake.responses.set('rpc.discover', { openrpc: '1.3.2', methods: [{ name: 'rpc.discover' }] });
+  fake.responses.set('rpc.discover', discoverDoc([{ name: 'rpc.discover' }]));
   const result = await call('brp_execute', { method: 'rpc.discover' });
   assert.equal(fake.calls.length, 2);
   assert.equal(fake.calls[1]!.params, undefined);

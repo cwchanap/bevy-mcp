@@ -1,6 +1,7 @@
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { basename, dirname, resolve } from 'node:path';
+import { realpathSync } from 'node:fs';
+import { basename, dirname, isAbsolute, relative, resolve } from 'node:path';
 
 /**
  * Repository-owned Cargo runtime: Bevy target discovery via
@@ -74,6 +75,27 @@ interface CargoArtifactMessage {
 function resolveManifestDir(root: string): string {
   const resolved = resolve(root);
   return basename(resolved) === 'Cargo.toml' ? dirname(resolved) : resolved;
+}
+
+/** Canonicalize like upstream `safe_canonicalize` (MIT): realpath when the
+ * path exists so symlinked search roots and manifest dirs compare equal,
+ * else the absolute-resolved path so the scope check still works. */
+function canonicalizeOrSelf(path: string): string {
+  try {
+    return realpathSync(path);
+  } catch {
+    return resolve(path);
+  }
+}
+
+/** Upstream `filter_targets_by_path_scope` (MIT): keep only targets whose
+ * manifest directory is at-or-under the caller's search root. `cargo
+ * metadata` expands a member dir to the whole workspace; the post-filter
+ * restores the requested scope so a member path cannot expose (or launch)
+ * sibling targets. Component-wise prefix check, not a string prefix. */
+function withinScope(packageRoot: string, scope: string): boolean {
+  const rel = relative(canonicalizeOrSelf(scope), canonicalizeOrSelf(packageRoot));
+  return rel === '' || (!rel.startsWith('..') && !isAbsolute(rel));
 }
 
 /** Upstream crate-name constants (`app_tools/targets/constants.rs`, MIT). */
@@ -184,7 +206,10 @@ export class CargoRuntime {
   }
 
   /** List executable app/example targets under `root` (a directory or a
-   * `Cargo.toml` path; default cwd). Deterministically ordered. */
+   * `Cargo.toml` path; default cwd). Deterministically ordered. When `root`
+   * is given, results are scoped to it — upstream applies the same
+   * post-filter only for an explicit `path` (the implicit cwd search is
+   * unfiltered). */
   async listTargets(root?: string): Promise<BevyTarget[]> {
     const cwd = resolveManifestDir(root ?? process.cwd());
     const { stdout } = await this.run(
@@ -192,7 +217,9 @@ export class CargoRuntime {
       ['metadata', '--format-version', '1', '--no-deps'],
       { cwd },
     );
-    return normalizeCargoMetadata(stdout);
+    const targets = normalizeCargoMetadata(stdout);
+    if (root === undefined) return targets;
+    return targets.filter((target) => withinScope(target.packageRoot, cwd));
   }
 
   /** Build a target via `cargo build -p <package> --bin/--example <name>`

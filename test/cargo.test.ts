@@ -138,10 +138,40 @@ test('listTargets runs cargo metadata through the seam and resolves the manifest
   const targets = await cargo.listTargets('/ws/alpha/Cargo.toml');
   assert.equal(calls[0].args.join(' '), 'metadata --format-version 1 --no-deps');
   assert.equal(calls[0].cwd, '/ws/alpha');
-  assert.equal(targets.length, 6);
-  // Default root = cwd.
-  await cargo.listTargets();
+  assert.equal(targets.length, 4);
+  // Default root = cwd; the implicit cwd search is unfiltered (upstream parity).
+  const unscoped = await cargo.listTargets();
   assert.equal(calls[1].cwd, process.cwd());
+  assert.equal(unscoped.length, 6);
+});
+
+test('listTargets scopes results to the caller-supplied root inside a workspace', async () => {
+  const { runner } = makeFakeRunner('');
+  const cargo = new CargoRuntime(runner);
+
+  // cargo metadata expands a member dir to the WHOLE workspace; the returned
+  // targets must be filtered back under the requested root so a member path
+  // cannot expose (or launch) sibling-member targets.
+  const alphaOnly = await cargo.listTargets('/ws/alpha');
+  assert.deepEqual(
+    alphaOnly.map((t) => `${t.packageName}/${t.name}/${t.kind}`),
+    [
+      'alpha-pkg/alpha-pkg/app',
+      'alpha-pkg/demo/example',
+      'alpha-pkg/shared/app',
+      'alpha-pkg/shared/example',
+    ],
+  );
+
+  const betaOnly = await cargo.listTargets('/ws/beta/Cargo.toml');
+  assert.deepEqual(
+    betaOnly.map((t) => `${t.packageName}/${t.name}`),
+    ['beta-pkg/shared'],
+  );
+
+  // The workspace root still covers every member; an unrelated root is empty.
+  assert.equal((await cargo.listTargets('/ws')).length, 6);
+  assert.deepEqual(await cargo.listTargets('/elsewhere'), []);
 });
 
 const BUILD_OUTPUT = [

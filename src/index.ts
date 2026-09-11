@@ -9,7 +9,8 @@ export async function main(): Promise<void> {
   // Contractual cleanup order (AGENTS.md): watches -> processes -> server.
   // Idempotent via the shared in-flight run. A rejected cleanup means a
   // tracked child survived termination — the explicit process.exit paths
-  // below are skipped in that case so the child is not orphaned.
+  // below are skipped in that case so the child is not orphaned, and the
+  // attempt is retryable (the rejected run is not latched).
   const cleanup = createCleanup({
     stopWatches: () => services.watches.stopAll(),
     shutdownProcesses: () => services.processes.shutdownAll(),
@@ -26,9 +27,12 @@ export async function main(): Promise<void> {
   // Signals bypass the stdin EOF path: run the SAME ordered cleanup, then
   // exit with the conventional 128+signal code — only when cleanup actually
   // succeeded (a failed child shutdown leaves the child tracked, so the
-  // process stays up rather than orphaning it).
+  // process stays up rather than orphaning it). The handler stays registered:
+  // after a rejected cleanup a later signal retries shutdownAll instead of
+  // falling through to Node's default termination, which would orphan the
+  // still-tracked child.
   const exitOnSignal = (signal: NodeJS.Signals, code: number): void => {
-    process.once(signal, () => {
+    process.on(signal, () => {
       exitAfterCleanup(cleanup, code, (exitCode) => process.exit(exitCode));
     });
   };

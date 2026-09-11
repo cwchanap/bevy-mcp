@@ -77,6 +77,37 @@ test('a failed process shutdown still closes the server and rejects the cleanup'
   }
 });
 
+test('a rejected cleanup does not latch: a later attempt re-runs the steps and exits', async () => {
+  const restore = silenceConsoleError();
+  try {
+    // First shutdown attempt fails (a tracked child survives termination);
+    // a later signal must retry shutdownAll rather than reusing the settled
+    // rejection — only the successful attempt may exit.
+    let failProcesses = true;
+    const s = steps({
+      shutdownProcesses: async () => {
+        if (failProcesses) throw new Error('child survived SIGKILL');
+      },
+    });
+    const cleanup = createCleanup(s);
+    const exitCalls: number[] = [];
+
+    exitAfterCleanup(cleanup, 143, (code) => exitCalls.push(code));
+    await assert.rejects(cleanup());
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    assert.deepEqual(exitCalls, [] as number[], 'failed attempt must not exit');
+
+    s.order.length = 0;
+    failProcesses = false;
+    exitAfterCleanup(cleanup, 143, (code) => exitCalls.push(code));
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    assert.deepEqual(s.order, ['watches', 'processes', 'server'], 'retry re-runs all steps');
+    assert.deepEqual(exitCalls, [143], 'only the successful attempt exits');
+  } finally {
+    restore();
+  }
+});
+
 test('the explicit exit path is skipped when cleanup rejects', async () => {
   const restore = silenceConsoleError();
   try {

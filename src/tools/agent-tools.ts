@@ -5,28 +5,173 @@ import type { BevyMcpServices } from '../services.js';
 import { brpErrorInfo, toolError, toolSuccess } from './response.js';
 import type { OwnedToolHandler } from './register.js';
 
-/** Method names from an OpenRPC-style `rpc.discover` document. Mirrors
- * upstream's `OpenRpcDocument` decode: a document that is not an object
- * carrying a `methods` array, an entry without a string `name`, or an empty
- * method name is a decode failure — never an empty catalog (which would
- * misreport the requested method as unregistered). */
+/** Method names from an `rpc.discover` document. Mirrors upstream's typed
+ * `serde_json::from_value::<OpenRpcDocument>` decode (bevy_remote 0.19.1
+ * `schemas/open_rpc.rs`, MIT): `openrpc`, `info.title`/`info.version`, and
+ * `methods` are required; `servers` and each method's `summary`/`description`/
+ * `params` are type-checked when present (a `Parameter` requires `name` and a
+ * `JsonSchemaBevyType` `schema`). A document failing the typed decode is a
+ * decode failure — never an empty catalog (which would misreport the
+ * requested method as unregistered). */
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+/** serde `Option<String>`-shaped: absent, null, or a string. */
+function isOptionalString(value: unknown): boolean {
+  return value === undefined || value === null || typeof value === 'string';
+}
+
+/** serde `Vec<String>`-shaped. */
+function isStringArray(value: unknown): boolean {
+  return Array.isArray(value) && value.every((entry) => typeof entry === 'string');
+}
+
+/** Serde variant spellings of bevy_remote's `SchemaKind`, `SchemaType`
+ * (rename_all = "lowercase"), `StorageKind`, and `RelationshipKind`. */
+const SCHEMA_KINDS = new Set([
+  'Struct',
+  'Enum',
+  'Map',
+  'Array',
+  'List',
+  'Tuple',
+  'TupleStruct',
+  'Set',
+  'Value',
+]);
+const SCHEMA_TYPES = new Set([
+  'string',
+  'float',
+  'uint',
+  'int',
+  'object',
+  'array',
+  'boolean',
+  'set',
+  'null',
+]);
+const STORAGE_KINDS = new Set(['Table', 'SparseSet']);
+const RELATIONSHIP_KINDS = new Set(['Relationship', 'RelationshipTarget']);
+
+/** `ComponentMetadata` decode: `mutable`/`storageType`/`isSendAndSync`
+ * required; `requiredComponentTypes`/`relationshipKind` checked when present. */
+function isComponentMetadata(value: unknown): boolean {
+  if (!isRecord(value)) return false;
+  if (typeof value['mutable'] !== 'boolean') return false;
+  if (typeof value['storageType'] !== 'string' || !STORAGE_KINDS.has(value['storageType'])) {
+    return false;
+  }
+  if (typeof value['isSendAndSync'] !== 'boolean') return false;
+  if (
+    value['requiredComponentTypes'] !== undefined &&
+    !isStringArray(value['requiredComponentTypes'])
+  ) {
+    return false;
+  }
+  const relationshipKind = value['relationshipKind'];
+  return (
+    relationshipKind === undefined ||
+    relationshipKind === null ||
+    (typeof relationshipKind === 'string' && RELATIONSHIP_KINDS.has(relationshipKind))
+  );
+}
+
+/** `JsonSchemaBevyType` decode: `shortPath`/`typePath`/`kind`/`type`
+ * required (enums checked); typed optionals checked when present. `keyType`,
+ * `valueType`, and `items` are `Option<serde_json::Value>` — anything goes. */
+function isJsonSchemaBevyType(value: unknown): boolean {
+  if (!isRecord(value)) return false;
+  if (typeof value['shortPath'] !== 'string') return false;
+  if (typeof value['typePath'] !== 'string') return false;
+  if (typeof value['kind'] !== 'string' || !SCHEMA_KINDS.has(value['kind'])) return false;
+  if (typeof value['type'] !== 'string' || !SCHEMA_TYPES.has(value['type'])) return false;
+  if (!isOptionalString(value['modulePath']) || !isOptionalString(value['crateName'])) {
+    return false;
+  }
+  if (value['reflectTypes'] !== undefined && !isStringArray(value['reflectTypes'])) return false;
+  if (value['required'] !== undefined && !isStringArray(value['required'])) return false;
+  const additionalProperties = value['additionalProperties'];
+  if (
+    additionalProperties !== undefined &&
+    additionalProperties !== null &&
+    typeof additionalProperties !== 'boolean'
+  ) {
+    return false;
+  }
+  const componentInfo = value['componentInfo'];
+  if (componentInfo !== undefined && componentInfo !== null && !isComponentMetadata(componentInfo)) {
+    return false;
+  }
+  if (value['properties'] !== undefined && !isRecord(value['properties'])) return false;
+  if (value['oneOf'] !== undefined && !Array.isArray(value['oneOf'])) return false;
+  if (value['prefixItems'] !== undefined && !Array.isArray(value['prefixItems'])) return false;
+  return true;
+}
+
+/** `Parameter` decode: `name` and `schema` required; `description` checked
+ * when present. */
+function isParameter(value: unknown): boolean {
+  if (!isRecord(value)) return false;
+  if (typeof value['name'] !== 'string') return false;
+  if (!isOptionalString(value['description'])) return false;
+  return isJsonSchemaBevyType(value['schema']);
+}
+
+/** `Vec<ServerObject>` decode: each entry requires string `name`/`url`. */
+function isServerArray(value: unknown): boolean {
+  return (
+    Array.isArray(value) &&
+    value.every(
+      (server) =>
+        isRecord(server) &&
+        typeof server['name'] === 'string' &&
+        typeof server['url'] === 'string' &&
+        isOptionalString(server['description']),
+    )
+  );
+}
+
 function discoveredMethods(document: unknown): string[] {
-  const methods =
-    document !== null && typeof document === 'object' && !Array.isArray(document)
-      ? (document as { methods?: unknown }).methods
-      : undefined;
+  if (!isRecord(document)) {
+    throw new Error('rpc.discover document is not an object with a methods array');
+  }
+  if (typeof document['openrpc'] !== 'string') {
+    throw new Error('rpc.discover document is missing required field `openrpc`');
+  }
+  const info = document['info'];
+  if (
+    !isRecord(info) ||
+    typeof info['title'] !== 'string' ||
+    typeof info['version'] !== 'string' ||
+    !isOptionalString(info['description'])
+  ) {
+    throw new Error('rpc.discover document `info` is not an object with string `title`/`version`');
+  }
+  const servers = document['servers'];
+  if (servers !== undefined && servers !== null && !isServerArray(servers)) {
+    throw new Error('rpc.discover document `servers` is not a list of server objects');
+  }
+  const methods = document['methods'];
   if (!Array.isArray(methods)) {
     throw new Error('rpc.discover document is not an object with a methods array');
   }
   return methods.map((entry, index) => {
-    const name = (entry as { name?: unknown })?.name;
-    if (typeof name !== 'string') {
+    if (!isRecord(entry) || typeof entry['name'] !== 'string') {
       throw new Error(`rpc.discover method entry ${index} has no string name`);
     }
-    if (name === '') {
+    if (!isOptionalString(entry['summary']) || !isOptionalString(entry['description'])) {
+      throw new Error(`rpc.discover method entry ${index} has non-string summary/description`);
+    }
+    const params = entry['params'];
+    if (params !== undefined && (!Array.isArray(params) || !params.every(isParameter))) {
+      throw new Error(`rpc.discover method entry ${index} has malformed params`);
+    }
+    if (entry['name'] === '') {
       throw new Error('rpc.discover returned an empty method name');
     }
-    return name;
+    return entry['name'];
   });
 }
 
