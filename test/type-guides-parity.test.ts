@@ -74,7 +74,15 @@ function normalizeTypeGuideResponse(value: unknown): unknown {
     const out: Record<string, unknown> = {};
     for (const [key, item] of Object.entries(value as Record<string, unknown>)) {
       if (/^(timestamp|duration|duration_ms|elapsed|pid|process_id)$/i.test(key)) continue;
-      out[key] = normalizeTypeGuideResponse(item);
+      const normalized = normalizeTypeGuideResponse(item);
+      // reflect_traits mirrors registry.schema's reflectTypes, built from a
+      // HashMap<TypeId, String> — iteration order is randomized per fixture
+      // process, so compare it as a set. (requiredComponentTypes uses an
+      // IndexMap with a fixed hasher and stays deterministic.)
+      out[key] =
+        key === 'reflect_traits' && Array.isArray(normalized)
+          ? [...normalized].sort()
+          : normalized;
     }
     return out;
   }
