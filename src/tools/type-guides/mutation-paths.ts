@@ -445,10 +445,15 @@ function checkKnowledge(ctx: RecursionContext): KnowledgeAction {
 /** Default element count when an array size cannot be parsed from its name. */
 const DEFAULT_ARRAY_EXAMPLE_LENGTH = 2;
 
+/** Repository-owned cap on materialized `[T; N]` example arrays (value-builder
+ * keeps the same bound); larger declared sizes fall back to the default. */
+const MAX_ARRAY_EXAMPLE_LENGTH = 1024;
+
 /** Extract `[T; N]` size from a type name (upstream `extract_array_size`).
  * Upstream parses into `usize`; an overflowing literal fails the parse and
  * falls back to the default length — `Number.isSafeInteger` is the closest
- * JS equivalent of that bound. */
+ * JS equivalent of that bound. The cap bounds the materialized example:
+ * unlike upstream, `Array.from` would really allocate `size` elements. */
 function extractArraySize(typeName: string): number | undefined {
   const semi = typeName.lastIndexOf('; ');
   const close = typeName.lastIndexOf(']');
@@ -456,7 +461,7 @@ function extractArraySize(typeName: string): number | undefined {
   const sizeStr = typeName.slice(semi + 2, close);
   if (!/^\d+$/.test(sizeStr)) return undefined;
   const size = Number(sizeStr);
-  return Number.isSafeInteger(size) ? size : undefined;
+  return Number.isSafeInteger(size) && size <= MAX_ARRAY_EXAMPLE_LENGTH ? size : undefined;
 }
 
 /** Complex (array/object) values cannot be map keys or set elements. */

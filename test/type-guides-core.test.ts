@@ -30,6 +30,7 @@ import {
   buildValueExample,
   type ValueContext,
 } from '../src/tools/type-guides/value-builder.js';
+import { buildMutationPaths } from '../src/tools/type-guides/mutation-paths.js';
 
 // ===== Registry fixtures (captured live from the running Bevy fixture app) =====
 
@@ -232,6 +233,22 @@ test('arrays replicate the element example per inferred size', () => {
     [1, 2, 3],
     [1, 2, 3],
   ]);
+});
+
+test('pathological array sizes fall back to the default example length', () => {
+  const registry = makeRegistry({
+    '[u8; 100000]': {
+      typePath: '[u8; 100000]',
+      kind: 'Array',
+      type: 'array',
+      items: { type: { $ref: '#/$defs/u8' } },
+    },
+  });
+  // Both array example paths must cap the materialized length, not allocate
+  // 100k elements for the declared size.
+  assert.deepEqual(exampleOf(registry, '[u8; 100000]'), [128, 128]);
+  const rootPath = buildMutationPaths('[u8; 100000]', registry).find((p) => p.path === '');
+  assert.deepEqual(rootPath?.example, [128, 128]);
 });
 
 test('lists assemble a single-element array', () => {

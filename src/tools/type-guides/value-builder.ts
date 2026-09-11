@@ -61,6 +61,11 @@ import type { VariantKind } from './schema-info.js';
 /** Default element count when an array's size cannot be inferred from its type name. */
 const DEFAULT_ARRAY_EXAMPLE_LENGTH = 2;
 
+/** Repository-owned cap on materialized `[T; N]` example arrays; larger
+ * declared sizes fall back to the default length (upstream defines no
+ * maximum, but upstream never materializes the full array either). */
+const MAX_ARRAY_EXAMPLE_LENGTH = 1024;
+
 // Option type classification (upstream `option_classification.rs`).
 const OPTION_PREFIX = 'core::option::Option<';
 const OPTION_SOME_FIELD = 'Some';
@@ -413,8 +418,12 @@ function extractArraySize(typeName: string): number | undefined {
   // Upstream parses the digits into `usize`: an overflowing literal fails the
   // parse and falls back to the default length. JS has no usize — the safe-
   // integer bound is the closest faithful equivalent (past it the digits no
-  // longer round-trip exactly, and `Array.from` could never produce them).
-  return Number.isSafeInteger(size) && size >= 0 ? size : undefined;
+  // longer round-trip exactly). The repository-owned cap sits below that:
+  // examples are materialized with `Array.from`, so a literal like
+  // `[u8; 100000000]` must not allocate that many elements.
+  return Number.isSafeInteger(size) && size >= 0 && size <= MAX_ARRAY_EXAMPLE_LENGTH
+    ? size
+    : undefined;
 }
 
 /** Complex (non-primitive) values cannot be map keys or set elements. */
