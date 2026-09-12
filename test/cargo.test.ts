@@ -1,9 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
+import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
-import { CargoRuntime, packageNameFromPackageId, normalizeCargoMetadata, selectExecutableArtifact, type BevyTarget, type CargoRunner } from '../src/runtime/cargo.js';
+import { basename, join } from 'node:path';
+import { CargoRuntime, computeRelativePath, packageNameFromPackageId, normalizeCargoMetadata, selectExecutableArtifact, type BevyTarget, type CargoRunner } from '../src/runtime/cargo.js';
 
 // ===== Unit fixtures (pure JSON parsing through the runner seam) =====
 
@@ -132,27 +134,142 @@ function makeFakeRunner(buildOutput: string | string[] | Error) {
   return { runner, calls };
 }
 
+// ===== Discovery fixtures (real directories — the shallow scan is real fs) =====
+
+const TMP_ROOTS: string[] = [];
+function makeTmpRoot(): string {
+  const dir = mkdtempSync(join(tmpdir(), 'bevy-mcp-cargo-'));
+  TMP_ROOTS.push(dir);
+  return dir;
+}
+test.after(() => {
+  for (const dir of TMP_ROOTS) rmSync(dir, { recursive: true, force: true });
+});
+
+function writeManifest(dir: string, contents = '[package]\nname = "x"\nversion = "0.1.0"\n'): void {
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(dir, 'Cargo.toml'), contents);
+}
+
+interface PkgSpec {
+  name: string;
+  dir: string;
+  deps?: string[];
+  targets?: { name: string; kind: string[]; src?: string }[];
+}
+
+/** `cargo metadata --no-deps` body for a workspace rooted at `wsRoot`. */
+function metadataJson(wsRoot: string, packages: PkgSpec[]): string {
+  return JSON.stringify({
+    workspace_root: wsRoot,
+    packages: packages.map((pkg) => ({
+      name: pkg.name,
+      manifest_path: join(pkg.dir, 'Cargo.toml'),
+      dependencies: (pkg.deps ?? ['bevy']).map((name) => ({ name })),
+      targets: (pkg.targets ?? []).map((target) => ({
+        name: target.name,
+        kind: target.kind,
+        src_path: target.src ?? join(pkg.dir, 'src', 'main.rs'),
+      })),
+    })),
+  });
+}
+
+/** Runner keyed by cwd: 'metadata' returns the mapped stdout (empty package
+ * set for unmapped dirs, or throws a mapped Error); 'build' behaves like
+ * makeFakeRunner. */
+function makeDirRunner(
+  byDir: Map<string, string | Error>,
+  buildOutput: string | string[] | Error = '',
+) {
+  const outputs = Array.isArray(buildOutput) ? [...buildOutput] : buildOutput;
+  const calls: { args: string[]; cwd?: string }[] = [];
+  const runner: CargoRunner = async (_file, args, options) => {
+    const cwd = options?.cwd ?? '';
+    calls.push({ args: [...args], cwd });
+    if (args[0] === 'metadata') {
+      const out = byDir.get(cwd);
+      if (out instanceof Error) throw out;
+      return {
+        stdout: out ?? JSON.stringify({ workspace_root: cwd, packages: [] }),
+        stderr: '',
+      };
+    }
+    const output = Array.isArray(outputs) ? outputs.shift() : outputs;
+    if (output instanceof Error) throw output;
+    return { stdout: output ?? '', stderr: '' };
+  };
+  return { runner, calls };
+}
+
 test('listTargets runs cargo metadata through the seam and resolves the manifest dir', async () => {
-  const { runner, calls } = makeFakeRunner('');
+  const alpha = join(makeTmpRoot(), 'alpha');
+  writeManifest(alpha);
+  const alphaMeta = metadataJson(alpha, [
+    {
+      name: 'alpha-pkg',
+      dir: alpha,
+      targets: [
+        { name: 'alpha-pkg', kind: ['bin'] },
+        { name: 'demo', kind: ['example'], src: join(alpha, 'examples', 'demo.rs') },
+        { name: 'shared', kind: ['bin'], src: join(alpha, 'src', 'bin', 'shared.rs') },
+        { name: 'shared', kind: ['example'], src: join(alpha, 'examples', 'shared.rs') },
+      ],
+    },
+  ]);
+  const { runner, calls } = makeDirRunner(new Map([[alpha, alphaMeta]]));
   const cargo = new CargoRuntime(runner);
-  const targets = await cargo.listTargets('/ws/alpha/Cargo.toml');
-  assert.equal(calls[0].args.join(' '), 'metadata --format-version 1 --no-deps');
-  assert.equal(calls[0].cwd, '/ws/alpha');
+  const targets = await cargo.listTargets(join(alpha, 'Cargo.toml'));
+  assert.equal(calls[0]!.args.join(' '), 'metadata --format-version 1 --no-deps');
+  assert.equal(calls[0]!.cwd, alpha);
   assert.equal(targets.length, 4);
+
   // Default root = cwd; the implicit cwd search is unfiltered (upstream parity).
-  const unscoped = await cargo.listTargets();
-  assert.equal(calls[1].cwd, process.cwd());
+  const { runner: cwdRunner, calls: cwdCalls } = makeDirRunner(
+    new Map([[process.cwd(), FIXTURE_METADATA]]),
+  );
+  const unscoped = await new CargoRuntime(cwdRunner).listTargets();
+  assert.equal(cwdCalls[0]!.cwd, process.cwd());
   assert.equal(unscoped.length, 6);
 });
 
 test('listTargets scopes results to the caller-supplied root inside a workspace', async () => {
-  const { runner } = makeFakeRunner('');
+  const ws = makeTmpRoot();
+  const alpha = join(ws, 'alpha');
+  const beta = join(ws, 'beta');
+  const util = join(ws, 'util');
+  writeManifest(ws, '[workspace]\nmembers = ["alpha", "beta", "util"]\nresolver = "2"\n');
+  writeManifest(alpha);
+  writeManifest(beta);
+  writeManifest(util);
+  // Real `cargo metadata` at a member dir resolves the whole workspace.
+  const wsMeta = metadataJson(ws, [
+    {
+      name: 'alpha-pkg',
+      dir: alpha,
+      targets: [
+        { name: 'alpha-pkg', kind: ['bin'] },
+        { name: 'demo', kind: ['example'], src: join(alpha, 'examples', 'demo.rs') },
+        { name: 'shared', kind: ['bin'], src: join(alpha, 'src', 'bin', 'shared.rs') },
+        { name: 'shared', kind: ['example'], src: join(alpha, 'examples', 'shared.rs') },
+      ],
+    },
+    { name: 'beta-pkg', dir: beta, targets: [{ name: 'shared', kind: ['bin'] }] },
+    { name: 'util-pkg', dir: util, deps: ['serde'], targets: [{ name: 'util-cli', kind: ['bin'] }] },
+  ]);
+  const { runner } = makeDirRunner(
+    new Map<string, string | Error>([
+      [ws, wsMeta],
+      [alpha, wsMeta],
+      [beta, wsMeta],
+    ]),
+  );
   const cargo = new CargoRuntime(runner);
 
   // cargo metadata expands a member dir to the WHOLE workspace; the returned
   // targets must be filtered back under the requested root so a member path
   // cannot expose (or launch) sibling-member targets.
-  const alphaOnly = await cargo.listTargets('/ws/alpha');
+  const alphaOnly = await cargo.listTargets(alpha);
   assert.deepEqual(
     alphaOnly.map((t) => `${t.packageName}/${t.name}/${t.kind}`),
     [
@@ -163,15 +280,139 @@ test('listTargets scopes results to the caller-supplied root inside a workspace'
     ],
   );
 
-  const betaOnly = await cargo.listTargets('/ws/beta/Cargo.toml');
+  const betaOnly = await cargo.listTargets(join(beta, 'Cargo.toml'));
   assert.deepEqual(
     betaOnly.map((t) => `${t.packageName}/${t.name}`),
     ['beta-pkg/shared'],
   );
 
   // The workspace root still covers every member; an unrelated root is empty.
-  assert.equal((await cargo.listTargets('/ws')).length, 6);
-  assert.deepEqual(await cargo.listTargets('/elsewhere'), []);
+  assert.equal((await cargo.listTargets(ws)).length, 5);
+  assert.deepEqual(await cargo.listTargets(join(ws, 'elsewhere')), []);
+});
+
+test("listTargets discovers Cargo projects in a manifestless root's immediate children", async () => {
+  // Upstream iter_cargo_project_paths: a search root without Cargo.toml is
+  // scanned one level deep for child projects (hidden/`target` dirs skipped).
+  const group = makeTmpRoot();
+  const one = join(group, 'one');
+  const two = join(group, 'two');
+  const hidden = join(group, '.hidden');
+  const targetDir = join(group, 'target');
+  const notCargo = join(group, 'not-cargo');
+  writeManifest(one);
+  writeManifest(two);
+  writeManifest(hidden);
+  writeManifest(targetDir);
+  mkdirSync(notCargo, { recursive: true });
+  const pkg = (dir: string, name: string): [string, string] => [
+    dir,
+    metadataJson(dir, [{ name: `${name}-pkg`, dir, targets: [{ name: `${name}-app`, kind: ['bin'] }] }]),
+  ];
+  const { runner, calls } = makeDirRunner(
+    new Map<string, string | Error>([
+      pkg(one, 'one'),
+      pkg(two, 'two'),
+      pkg(hidden, 'hidden'),
+      pkg(targetDir, 'target'),
+    ]),
+  );
+  const cargo = new CargoRuntime(runner);
+
+  const targets = await cargo.listTargets(group);
+  assert.deepEqual(
+    targets.map((t) => t.name),
+    ['one-app', 'two-app'],
+  );
+  assert.deepEqual(
+    [...new Set(calls.map((call) => call.cwd))].sort(),
+    [one, two].sort(),
+    'metadata runs per discovered child project, never at the root or skipped dirs',
+  );
+});
+
+test('listTargets still scans children under a standalone or member root', async () => {
+  // Upstream: only a multi-member workspace ROOT suppresses the child scan —
+  // a standalone package's own manifest does not hide nested projects.
+  const root = makeTmpRoot();
+  writeManifest(root);
+  const child = join(root, 'child');
+  writeManifest(child);
+  const { runner } = makeDirRunner(
+    new Map<string, string | Error>([
+      [root, metadataJson(root, [{ name: 'root-pkg', dir: root, targets: [{ name: 'root-app', kind: ['bin'] }] }])],
+      [child, metadataJson(child, [{ name: 'child-pkg', dir: child, targets: [{ name: 'child-app', kind: ['bin'] }] }])],
+    ]),
+  );
+  const cargo = new CargoRuntime(runner);
+  assert.deepEqual(
+    (await cargo.listTargets(root)).map((t) => t.name),
+    ['child-app', 'root-app'],
+  );
+});
+
+test('listTargets skips the child scan for a multi-member workspace root', async () => {
+  const ws = makeTmpRoot();
+  writeManifest(ws, '[workspace]\nmembers = ["alpha", "beta"]\nresolver = "2"\n');
+  const alpha = join(ws, 'alpha');
+  const beta = join(ws, 'beta');
+  const stray = join(ws, 'stray');
+  writeManifest(alpha);
+  writeManifest(beta);
+  writeManifest(stray); // excluded from the workspace on disk
+  const wsMeta = metadataJson(ws, [
+    { name: 'alpha-pkg', dir: alpha, targets: [{ name: 'alpha-app', kind: ['bin'] }] },
+    { name: 'beta-pkg', dir: beta, targets: [{ name: 'beta-app', kind: ['bin'] }] },
+  ]);
+  const { runner, calls } = makeDirRunner(
+    new Map<string, string | Error>([
+      [ws, wsMeta],
+      [stray, metadataJson(stray, [{ name: 'stray-pkg', dir: stray, targets: [{ name: 'stray-app', kind: ['bin'] }] }])],
+    ]),
+  );
+  const cargo = new CargoRuntime(runner);
+
+  assert.deepEqual(
+    (await cargo.listTargets(ws)).map((t) => t.name),
+    ['alpha-app', 'beta-app'],
+  );
+  assert.ok(
+    !calls.some((call) => call.cwd === stray),
+    'a non-member child crate under a multi-member workspace root is never scanned',
+  );
+});
+
+test('listTargets skips projects whose metadata Cargo cannot produce', async () => {
+  const root = makeTmpRoot();
+  writeManifest(root, 'this is not valid toml [');
+  const child = join(root, 'child');
+  writeManifest(child);
+  const { runner } = makeDirRunner(
+    new Map<string, string | Error>([
+      [root, new Error('cargo metadata failed')],
+      [child, metadataJson(child, [{ name: 'child-pkg', dir: child, targets: [{ name: 'child-app', kind: ['bin'] }] }])],
+    ]),
+  );
+  const cargo = new CargoRuntime(runner);
+  // Upstream never fails the listing on a broken manifest: the project is
+  // recorded as a standalone candidate, then skipped when metadata fails.
+  assert.deepEqual(
+    (await cargo.listTargets(root)).map((t) => t.name),
+    ['child-app'],
+  );
+});
+
+test('computeRelativePath mirrors the upstream search-root rules', () => {
+  const base = makeTmpRoot();
+  const pkg = join(base, 'pkg');
+  mkdirSync(pkg);
+  assert.equal(computeRelativePath(pkg, base), 'pkg');
+  // A path equal to the root reports its own directory name (upstream
+  // compute_relative_path falls back to the canonical file name).
+  assert.equal(computeRelativePath(base, base), basename(base));
+  // Outside the root the original path is kept.
+  const outside = join(base, '..', 'outside-proj');
+  assert.equal(computeRelativePath(outside, base), outside);
 });
 
 const BUILD_OUTPUT = [

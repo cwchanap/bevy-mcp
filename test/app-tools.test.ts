@@ -16,15 +16,25 @@ import { registerAppTools } from '../src/tools/register.js';
 import type { ToolCallJsonResponse } from '../src/tools/response.js';
 
 // Isolated workspace + LogStore roots per test file (node:test runs files as
-// processes). Package roots must be real directories: launch sets them as
-// cwd/CARGO_MANIFEST_DIR and list_bevy scans sources for brp_level.
+// processes). Package roots must be real directories with real manifests:
+// launch sets them as cwd/CARGO_MANIFEST_DIR, list_bevy scans sources for
+// brp_level, and project discovery checks each dir for a Cargo.toml.
 const BASE = mkdtempSync(join(tmpdir(), 'bevy-mcp-app-tools-'));
 const PKG_A = join(BASE, 'pkg_a');
 const PKG_B = join(BASE, 'pkg_b');
+const UTIL_PKG = join(BASE, 'util_pkg');
 
+writeFileSync(
+  join(BASE, 'Cargo.toml'),
+  '[workspace]\nmembers = ["pkg_a", "pkg_b", "util_pkg"]\nresolver = "2"\n',
+);
 mkdirSync(join(PKG_A, 'src', 'bin'), { recursive: true });
 mkdirSync(join(PKG_B, 'src'), { recursive: true });
 mkdirSync(join(PKG_B, 'examples'), { recursive: true });
+mkdirSync(UTIL_PKG, { recursive: true });
+writeFileSync(join(PKG_A, 'Cargo.toml'), '[package]\nname = "pkg_a"\nversion = "0.1.0"\n');
+writeFileSync(join(PKG_B, 'Cargo.toml'), '[package]\nname = "pkg_b"\nversion = "0.1.0"\n');
+writeFileSync(join(UTIL_PKG, 'Cargo.toml'), '[package]\nname = "util_pkg"\nversion = "0.1.0"\n');
 // pkg_a's src tree registers BrpExtrasPlugin -> 'extras' level.
 writeFileSync(join(PKG_A, 'src', 'main.rs'), 'use bevy_brp_extras::BrpExtrasPlugin;\n');
 // pkg_a's secondary bins have their own src_path files (custom layout).
@@ -36,6 +46,7 @@ writeFileSync(join(PKG_B, 'examples', 'demo.rs'), 'use bevy::remote::RemotePlugi
 writeFileSync(join(PKG_B, 'examples', 'both.rs'), 'fn main() {}\n');
 
 const METADATA = {
+  workspace_root: BASE,
   packages: [
     {
       name: 'pkg_a',
@@ -61,10 +72,10 @@ const METADATA = {
       // A workspace member without a `bevy` dependency is not a Bevy app —
       // upstream bevy_app_filter keeps it out of the listing entirely.
       name: 'util_pkg',
-      manifest_path: join(BASE, 'util_pkg', 'Cargo.toml'),
+      manifest_path: join(UTIL_PKG, 'Cargo.toml'),
       dependencies: [{ name: 'serde' }],
       targets: [
-        { name: 'util-cli', kind: ['bin'], src_path: join(BASE, 'util_pkg', 'src', 'main.rs') },
+        { name: 'util-cli', kind: ['bin'], src_path: join(UTIL_PKG, 'src', 'main.rs') },
       ],
     },
   ],
