@@ -1,10 +1,14 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { readdir } from 'node:fs/promises';
-import { basename, join, resolve } from 'node:path';
+import { basename, join } from 'node:path';
 import type { CallToolResult } from '@modelcontextprotocol/server';
 import { DEFAULT_BRP_PORT } from '../brp/client.js';
 import { BrpError } from '../brp/errors.js';
-import { computeRelativePath, type BevyTarget } from '../runtime/cargo.js';
+import {
+  computeRelativePath,
+  resolveManifestDir,
+  type BevyTarget,
+} from '../runtime/cargo.js';
 import type { TrackedProcess } from '../runtime/process-manager.js';
 import type { BevyMcpServices } from '../services.js';
 import { toolError, toolSuccess } from './response.js';
@@ -129,7 +133,7 @@ export function listBevyHandler(services: BevyMcpServices): OwnedToolHandler {
     const root = typeof args.path === 'string' ? args.path : undefined;
     try {
       const targets = await services.cargo.listTargets(root);
-      const base = resolve(root ?? process.cwd());
+      const base = resolveManifestDir(root ?? process.cwd());
       const items = await Promise.all(
         targets.map(async (target) => ({
           name: target.name,
@@ -309,7 +313,7 @@ export function launchHandler(services: BevyMcpServices): OwnedToolHandler {
     const callInfo = { mcp_tool: 'brp_launch' } as const;
     try {
       const plan = parseLaunchArgs(args);
-      const base = resolve(plan.path ?? process.cwd());
+      const base = resolveManifestDir(plan.path ?? process.cwd());
       const resolved = await resolveTarget(services, plan, base);
       if ('message' in resolved) {
         return toolError(callInfo, resolved.message, {

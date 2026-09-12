@@ -72,7 +72,7 @@ interface CargoArtifactMessage {
 
 /** Directory containing the manifest that scopes a `cargo` invocation:
  * accept either a directory or a path to a `Cargo.toml`. */
-function resolveManifestDir(root: string): string {
+export function resolveManifestDir(root: string): string {
   const resolved = resolve(root);
   return basename(resolved) === 'Cargo.toml' ? dirname(resolved) : resolved;
 }
