@@ -281,6 +281,35 @@ test('brp_list_bevy returns cargo-metadata targets with kind and brp_level', asy
   }
 });
 
+test('brp_list_bevy keeps relative_path relative when path is a Cargo.toml', async () => {
+  const { call } = harness();
+  const result = await call('brp_list_bevy', { path: join(BASE, 'Cargo.toml') });
+
+  const env = envelope(result);
+  assert.equal(env.status, 'success');
+  assert.equal(env.message, 'Found 6 Bevy targets');
+  // The manifest's directory is the search root (matching listTargets'
+  // scope), so member package roots stay relative to it.
+  const paths = new Set((env.result as Item[]).map((item) => item.relative_path));
+  assert.deepEqual([...paths].sort(), ['pkg_a', 'pkg_b']);
+});
+
+test('brp_launch not-found paths stay relative when path is a Cargo.toml', async () => {
+  const { call } = harness();
+  const result = await call('brp_launch', {
+    target_name: 'nope',
+    path: join(BASE, 'Cargo.toml'),
+  });
+
+  const env = envelope(result);
+  assert.equal(env.status, 'error');
+  const errorInfo = env.error_info as {
+    available_targets: { name: string; kind: string; path: string }[];
+  };
+  const paths = new Set(errorInfo.available_targets.map((target) => target.path));
+  assert.deepEqual([...paths].sort(), ['pkg_a', 'pkg_b']);
+});
+
 test('brp_launch builds the selected app once and spawns it referenced', async () => {
   const { call, cargoBuildCalls, processes, logStore } = harness();
   const result = await call('brp_launch', {
