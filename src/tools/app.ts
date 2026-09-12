@@ -1,10 +1,10 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { readdir } from 'node:fs/promises';
-import { basename, join, relative, resolve } from 'node:path';
+import { basename, join, resolve } from 'node:path';
 import type { CallToolResult } from '@modelcontextprotocol/server';
 import { DEFAULT_BRP_PORT } from '../brp/client.js';
 import { BrpError } from '../brp/errors.js';
-import type { BevyTarget } from '../runtime/cargo.js';
+import { computeRelativePath, type BevyTarget } from '../runtime/cargo.js';
 import type { TrackedProcess } from '../runtime/process-manager.js';
 import type { BevyMcpServices } from '../services.js';
 import { toolError, toolSuccess } from './response.js';
@@ -138,7 +138,7 @@ export function listBevyHandler(services: BevyMcpServices): OwnedToolHandler {
           brp_level: await brpLevelFor(target),
           workspace_root: target.workspaceRoot,
           manifest_path: target.manifestPath,
-          relative_path: relative(base, target.packageRoot),
+          relative_path: computeRelativePath(target.packageRoot, base),
           builds: buildsFor(target),
         })),
       );
@@ -241,7 +241,7 @@ function availableTargets(targets: BevyTarget[], base: string): AvailableTarget[
   return targets.map((target) => ({
     name: target.name,
     kind: target.kind,
-    path: relative(base, target.packageRoot),
+    path: computeRelativePath(target.packageRoot, base),
   }));
 }
 

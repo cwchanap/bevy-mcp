@@ -1,7 +1,7 @@
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { realpathSync } from 'node:fs';
-import { basename, dirname, isAbsolute, relative, resolve } from 'node:path';
+import { existsSync, readdirSync, realpathSync, type Dirent } from 'node:fs';
+import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path';
 
 /**
  * Repository-owned Cargo runtime: Bevy target discovery via
@@ -120,7 +120,10 @@ function isBevyPackage(pkg: CargoMetadataPackage): boolean {
  * executable targets (bins → `app`, examples → `example`) of Bevy packages
  * only, sorted by name, then package, then kind. */
 export function normalizeCargoMetadata(stdout: string): BevyTarget[] {
-  const metadata = JSON.parse(stdout) as CargoMetadata;
+  return normalizeMetadata(JSON.parse(stdout) as CargoMetadata);
+}
+
+function normalizeMetadata(metadata: CargoMetadata): BevyTarget[] {
   const workspaceRoot = metadata.workspace_root ?? '';
   const targets: BevyTarget[] = [];
   for (const pkg of metadata.packages ?? []) {
@@ -197,6 +200,25 @@ export function selectExecutableArtifact(
   );
 }
 
+/** Upstream `compute_relative_path` (MIT): `path` relative to the search
+ * root; a path equal to the root reports its own directory name ('.' only
+ * for the filesystem root), and a path outside the root stays absolute. */
+export function computeRelativePath(path: string, searchRoot: string): string {
+  const canonical = canonicalizeOrSelf(path);
+  const rel = relative(canonicalizeOrSelf(searchRoot), canonical);
+  if (rel === '') return basename(canonical) || '.';
+  if (rel.startsWith('..') || isAbsolute(rel)) return path;
+  return rel;
+}
+
+/** One Cargo project found by the shallow discovery scan: a standalone
+ * project, or a workspace member carrying its canonical workspace root
+ * (upstream `DiscoveredProject`, MIT). */
+interface DiscoveredProject {
+  dir: string;
+  workspaceRoot?: string;
+}
+
 /** Discover Bevy targets and resolve build executables for owned tools. */
 export class CargoRuntime {
   private readonly run: CargoRunner;
@@ -205,21 +227,150 @@ export class CargoRuntime {
     this.run = run;
   }
 
-  /** List executable app/example targets under `root` (a directory or a
-   * `Cargo.toml` path; default cwd). Deterministically ordered. When `root`
-   * is given, results are scoped to it — upstream applies the same
-   * post-filter only for an explicit `path` (the implicit cwd search is
-   * unfiltered). */
-  async listTargets(root?: string): Promise<BevyTarget[]> {
-    const cwd = resolveManifestDir(root ?? process.cwd());
+  /** Single `cargo metadata --format-version 1 --no-deps` call at `dir`. */
+  private async metadataAt(dir: string): Promise<CargoMetadata> {
     const { stdout } = await this.run(
       'cargo',
       ['metadata', '--format-version', '1', '--no-deps'],
-      { cwd },
+      { cwd: dir },
     );
-    const targets = normalizeCargoMetadata(stdout);
+    return JSON.parse(stdout) as CargoMetadata;
+  }
+
+  /** Upstream `process_cargo_toml` (MIT): classify one directory containing
+   * a Cargo.toml as a workspace member (recording its canonical workspace
+   * root) or a standalone project; a manifest Cargo cannot parse still
+   * counts as a standalone candidate (upstream `add_fallback_standalone`).
+   * Returns true only for a multi-member workspace root — its members are
+   * already recorded through metadata so the caller skips the subdirectory
+   * scan. Successful metadata is cached under the workspace root so the
+   * collection pass does not run Cargo twice for one project. */
+  private async processCargoToml(
+    dir: string,
+    discovered: Map<string, DiscoveredProject>,
+    metadataByRoot: Map<string, CargoMetadata>,
+  ): Promise<boolean> {
+    const canonicalDir = canonicalizeOrSelf(dir);
+    let metadata: CargoMetadata;
+    try {
+      metadata = await this.metadataAt(dir);
+    } catch {
+      discovered.set(canonicalDir, { dir: canonicalDir });
+      return false;
+    }
+    const canonicalWorkspace = canonicalizeOrSelf(metadata.workspace_root ?? dir);
+    metadataByRoot.set(canonicalWorkspace, metadata);
+    if (canonicalDir !== canonicalWorkspace) {
+      discovered.set(canonicalDir, { dir: canonicalDir, workspaceRoot: canonicalWorkspace });
+      return false;
+    }
+    // Under --no-deps `packages` lists exactly the workspace members
+    // (upstream `discover_workspace_members`).
+    const memberDirs = (metadata.packages ?? [])
+      .map((pkg) => dirname(pkg.manifest_path))
+      .filter((memberDir) => existsSync(memberDir))
+      .map((memberDir) => canonicalizeOrSelf(memberDir));
+    if (memberDirs.length <= 1) {
+      discovered.set(canonicalDir, { dir: canonicalDir });
+      return false;
+    }
+    for (const memberDir of memberDirs) {
+      discovered.set(memberDir, { dir: memberDir, workspaceRoot: canonicalWorkspace });
+    }
+    return true;
+  }
+
+  /** Upstream `iter_cargo_project_paths`/`shallow_scan` (MIT): the search
+   * root plus its immediate non-hidden, non-`target` subdirectories that
+   * contain a Cargo.toml are Cargo project candidates; workspace members
+   * collapse to their workspace root, and a standalone dir that is also a
+   * recorded member is dropped. `cargo metadata` never descends into child
+   * directories, so without this scan a search root that merely *contains*
+   * Bevy projects would list nothing. Returns the deduplicated project
+   * dirs plus any metadata already fetched during classification. */
+  private async discoverProjectDirs(root: string): Promise<{
+    dirs: string[];
+    metadataByRoot: Map<string, CargoMetadata>;
+  }> {
+    const discovered = new Map<string, DiscoveredProject>();
+    const metadataByRoot = new Map<string, CargoMetadata>();
+    const visited = new Set([canonicalizeOrSelf(root)]);
+
+    const skipSubdirs = existsSync(join(root, 'Cargo.toml'))
+      ? await this.processCargoToml(root, discovered, metadataByRoot)
+      : false;
+
+    if (!skipSubdirs) {
+      let entries: Dirent[];
+      try {
+        entries = readdirSync(root, { withFileTypes: true });
+      } catch {
+        entries = [];
+      }
+      for (const entry of entries) {
+        // Upstream `should_skip_directory`, applied to children only — the
+        // root itself is always scanned (RootDirectorySkipPolicy::Bypass).
+        if (!entry.isDirectory() || entry.name.startsWith('.') || entry.name === 'target') {
+          continue;
+        }
+        const subdir = join(root, entry.name);
+        if (!existsSync(join(subdir, 'Cargo.toml'))) continue;
+        if (!visited.add(canonicalizeOrSelf(subdir))) continue;
+        await this.processCargoToml(subdir, discovered, metadataByRoot);
+      }
+    }
+
+    const memberDirs = new Set(
+      [...discovered.values()]
+        .filter((project) => project.workspaceRoot !== undefined)
+        .map((project) => project.dir),
+    );
+    const dirs = new Set<string>();
+    for (const project of discovered.values()) {
+      if (project.workspaceRoot !== undefined) dirs.add(project.workspaceRoot);
+      else if (!memberDirs.has(project.dir)) dirs.add(project.dir);
+    }
+    return { dirs: [...dirs], metadataByRoot };
+  }
+
+  /** List executable app/example targets under `root` (a directory or a
+   * `Cargo.toml` path; default cwd). Deterministically ordered. The search
+   * covers the root and its immediate child Cargo projects (upstream
+   * `iter_cargo_project_paths`, MIT), deduplicated by manifest + name +
+   * kind; a project whose metadata fails is skipped rather than failing
+   * the listing (upstream `if let Ok(detector)`). When `root` is given,
+   * results are scoped to it — upstream applies the same post-filter only
+   * for an explicit `path` (the implicit cwd search is unfiltered). */
+  async listTargets(root?: string): Promise<BevyTarget[]> {
+    const scope = resolveManifestDir(root ?? process.cwd());
+    const { dirs, metadataByRoot } = await this.discoverProjectDirs(scope);
+    const seen = new Set<string>();
+    const targets: BevyTarget[] = [];
+    for (const dir of dirs) {
+      let metadata = metadataByRoot.get(dir);
+      if (metadata === undefined) {
+        try {
+          metadata = await this.metadataAt(dir);
+        } catch {
+          continue;
+        }
+      }
+      for (const target of normalizeMetadata(metadata)) {
+        const key = `${target.manifestPath}::${target.name}::${target.kind}`;
+        if (!seen.has(key)) {
+          seen.add(key);
+          targets.push(target);
+        }
+      }
+    }
+    targets.sort(
+      (a, b) =>
+        compareStrings(a.name, b.name) ||
+        compareStrings(a.packageName, b.packageName) ||
+        compareStrings(a.kind, b.kind),
+    );
     if (root === undefined) return targets;
-    return targets.filter((target) => withinScope(target.packageRoot, cwd));
+    return targets.filter((target) => withinScope(target.packageRoot, scope));
   }
 
   /** Build a target via `cargo build -p <package> --bin/--example <name>`
